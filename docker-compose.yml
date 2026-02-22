@@ -3,10 +3,10 @@ version: '3'
 services:
   coverart:
     image: epochaudio/coverart_docker:latest
-    build: .
     network_mode: "host"
     restart: unless-stopped
     volumes:
       - ./images:/app/images:rw
-      - ./config/local.json:/app/config/local.json:ro
       - ./config.json:/app/config.json:rw
+      # Optional fixed settings:
+      # - ./config/local.json:/app/config/local.json:ro

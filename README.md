@@ -35,34 +35,28 @@ Compared with the square-frame version, this build focuses on:
 
 ### 快速安装（Docker Run）
 
-1. 创建目录与配置文件
+1. 最简准备（默认参数即可运行）
 
 ```bash
-mkdir -p images config
+mkdir -p images
 printf '%s\n' '{}' > config.json
-cat > config/local.json <<'EOF'
-{
-  "server": {
-    "port": 3666
-  },
-  "artwork": {
-    "saveDir": "./images",
-    "autoSave": true,
-    "format": "jpg"
-  }
-}
-EOF
 ```
 
-2. 运行容器（推荐：持久化参数 + token）
+说明：
+- `images/` 用于保存封面缓存（建议持久化）
+- `config.json` 用于保存 Roon 配对 token（建议持久化）
+- `config/local.json` 是可选项，不创建也能启动（使用默认参数）
+
+2. 运行容器（默认参数 + token 持久化）
 
 ```bash
+docker pull epochaudio/coverart_docker:latest
+
 docker run -d \
   --name roon-coverart \
   --network host \
   --restart unless-stopped \
   -v $(pwd)/images:/app/images \
-  -v $(pwd)/config/local.json:/app/config/local.json:ro \
   -v $(pwd)/config.json:/app/config.json:rw \
   epochaudio/coverart_docker:latest
 ```
@@ -79,13 +73,10 @@ version: '3'
 services:
   coverart:
     image: epochaudio/coverart_docker:latest
-    # 如需本地构建可保留 build: .
-    build: .
     network_mode: "host"
     restart: unless-stopped
     volumes:
       - ./images:/app/images:rw
-      - ./config/local.json:/app/config/local.json:ro
       - ./config.json:/app/config.json:rw
 ```
 
@@ -93,6 +84,38 @@ services:
 
 ```bash
 docker compose up -d
+```
+
+### 可选：使用 `config/local.json` 固化参数
+
+如果你需要固定端口、封面保存格式等参数，再创建 `config/local.json` 并挂载：
+
+```bash
+mkdir -p config
+cat > config/local.json <<'EOF'
+{
+  "server": {
+    "port": 3666
+  },
+  "artwork": {
+    "saveDir": "./images",
+    "autoSave": true,
+    "format": "jpg"
+  }
+}
+EOF
+```
+
+Docker Run 增加挂载：
+
+```bash
+-v $(pwd)/config/local.json:/app/config/local.json:ro
+```
+
+Docker Compose 增加：
+
+```yaml
+      - ./config/local.json:/app/config/local.json:ro
 ```
 
 ### 配置说明（建议写入 `config/local.json`）
@@ -160,34 +183,28 @@ docker build -t roon-coverart:16.9-local .
 
 ### Quick Start (Docker Run)
 
-1. Prepare directories and config files
+1. Minimal setup (defaults work out of the box)
 
 ```bash
-mkdir -p images config
+mkdir -p images
 printf '%s\n' '{}' > config.json
-cat > config/local.json <<'EOF'
-{
-  "server": {
-    "port": 3666
-  },
-  "artwork": {
-    "saveDir": "./images",
-    "autoSave": true,
-    "format": "jpg"
-  }
-}
-EOF
 ```
 
-2. Run the container (recommended persistent mounts)
+Notes:
+- `images/` stores cached/saved artwork (recommended to persist)
+- `config.json` stores the Roon pairing token (recommended to persist)
+- `config/local.json` is optional (defaults are used if missing)
+
+2. Run the container (default settings + persistent token)
 
 ```bash
+docker pull epochaudio/coverart_docker:latest
+
 docker run -d \
   --name roon-coverart \
   --network host \
   --restart unless-stopped \
   -v $(pwd)/images:/app/images \
-  -v $(pwd)/config/local.json:/app/config/local.json:ro \
   -v $(pwd)/config.json:/app/config.json:rw \
   epochaudio/coverart_docker:latest
 ```
@@ -204,13 +221,10 @@ version: '3'
 services:
   coverart:
     image: epochaudio/coverart_docker:latest
-    # Keep build: . if you want local builds
-    build: .
     network_mode: "host"
     restart: unless-stopped
     volumes:
       - ./images:/app/images:rw
-      - ./config/local.json:/app/config/local.json:ro
       - ./config.json:/app/config.json:rw
 ```
 
@@ -218,6 +232,38 @@ Start:
 
 ```bash
 docker compose up -d
+```
+
+### Optional: Persist fixed settings in `config/local.json`
+
+If you want to pin the port or artwork settings, create `config/local.json` and mount it:
+
+```bash
+mkdir -p config
+cat > config/local.json <<'EOF'
+{
+  "server": {
+    "port": 3666
+  },
+  "artwork": {
+    "saveDir": "./images",
+    "autoSave": true,
+    "format": "jpg"
+  }
+}
+EOF
+```
+
+Add this mount to Docker Run:
+
+```bash
+-v $(pwd)/config/local.json:/app/config/local.json:ro
+```
+
+Add this line to Docker Compose:
+
+```yaml
+      - ./config/local.json:/app/config/local.json:ro
 ```
 
 ### Configuration (Recommended in `config/local.json`)

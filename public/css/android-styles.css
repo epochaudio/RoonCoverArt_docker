@@ -1,0 +1,57 @@
+/* Android风格文本样式 - 使用JavaScript动态计算字体大小 */
+.track-title {
+  color: #ffffff;
+  opacity: 0.87;
+  font-weight: 600; /* Semi-bold */
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  /* 字体大小由JavaScript动态设置 */
+}
+
+.artist-name {
+  color: #ffffff;
+  opacity: 0.60;
+  font-weight: 400; /* Regular */
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  /* 字体大小由JavaScript动态设置 */
+}
+
+.album-name {
+  color: #ffffff;
+  opacity: 0.70;
+  font-weight: 400; /* Regular */
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  /* 字体大小由JavaScript动态设置 */
+}
+
+/* 隐藏空文本元素 */
+.track-info-container div:empty {
+  display: none;
+}
+
+/* 确保文本在加载前有合理的初始大小 */
+.track-title {
+  font-size: 32px; /* 初始大小，会被JavaScript覆盖 */
+}
+
+.artist-name {
+  font-size: 28px; /* 初始大小，会被JavaScript覆盖 */
+}
+
+.album-name {
+  font-size: 24px; /* 初始大小，会被JavaScript覆盖 */
+}

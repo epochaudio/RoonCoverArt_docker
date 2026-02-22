@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+
+# Runtime image cache
+images/*
+!images/.gitkeep
+
+# Roon pairing token/state (generated at runtime)
+config.json
+
+# Local IDE/runtime files
+.claude/
+.DS_Store

@@ -1,0 +1,269 @@
+# Roon Cover Art Docker (16:9 with Track Info)
+
+中文 | English
+
+这是 `Roon Cover Art` 的 **16:9 显示版本（Docker）**，适合电视、宽屏显示器等 16:9 屏幕。
+
+与方形画框版本不同，本版本重点是：
+- 16:9 画面布局
+- 播放时显示封面 + 曲目信息（标题 / 艺术家 / 专辑）
+- 停止播放后自动切换 Art Wall（封面墙）
+
+This is the **16:9 Docker edition** of `Roon Cover Art`, designed for TVs and wide displays.
+
+Compared with the square-frame version, this build focuses on:
+- 16:9 layout
+- Now playing cover art + track info (title / artist / album)
+- Auto-switch to Art Wall mode when playback stops
+
+## 中文说明
+
+### 功能特点
+
+- 实时显示当前播放专辑封面
+- 显示曲目信息（标题 / 艺术家 / 专辑）
+- 根据封面提取主色调作为背景氛围色
+- 播放停止后约 15 秒自动切换到 Art Wall 模式
+- Art Wall 每 60 秒刷新 3 张图片
+- 自动保存播放过的专辑封面到 `images/`
+- Roon 配对 token 持久化（通过 `config.json`，避免重启后重复授权）
+
+### Docker 镜像
+
+- `epochaudio/coverart_docker:5.0.1`
+- `epochaudio/coverart_docker:latest`
+
+### 快速安装（Docker Run）
+
+1. 创建目录与配置文件
+
+```bash
+mkdir -p images config
+printf '%s\n' '{}' > config.json
+cat > config/local.json <<'EOF'
+{
+  "server": {
+    "port": 3666
+  },
+  "artwork": {
+    "saveDir": "./images",
+    "autoSave": true,
+    "format": "jpg"
+  }
+}
+EOF
+```
+
+2. 运行容器（推荐：持久化参数 + token）
+
+```bash
+docker run -d \
+  --name roon-coverart \
+  --network host \
+  --restart unless-stopped \
+  -v $(pwd)/images:/app/images \
+  -v $(pwd)/config/local.json:/app/config/local.json:ro \
+  -v $(pwd)/config.json:/app/config.json:rw \
+  epochaudio/coverart_docker:latest
+```
+
+3. 打开页面
+
+- 默认地址：`http://localhost:3666`
+
+### Docker Compose（推荐）
+
+```yaml
+version: '3'
+
+services:
+  coverart:
+    image: epochaudio/coverart_docker:latest
+    # 如需本地构建可保留 build: .
+    build: .
+    network_mode: "host"
+    restart: unless-stopped
+    volumes:
+      - ./images:/app/images:rw
+      - ./config/local.json:/app/config/local.json:ro
+      - ./config.json:/app/config.json:rw
+```
+
+启动：
+
+```bash
+docker compose up -d
+```
+
+### 配置说明（建议写入 `config/local.json`）
+
+- `server.port`: Web 服务端口（默认 `3666`）
+- `artwork.saveDir`: 封面保存目录（默认 `./images`）
+- `artwork.autoSave`: 是否自动保存封面（默认 `true`）
+- `artwork.format`: 保存格式（`jpg` 或 `png`，默认 `jpg`）
+
+也支持环境变量（Docker）：
+- `SERVER_PORT`
+- `ARTWORK_SAVEDIR`
+- `ARTWORK_AUTOSAVE`
+- `ARTWORK_FORMAT`
+
+说明：
+- 固定参数建议放在 `config/local.json`
+- Roon 配对信息会写入根目录 `config.json`（请保留）
+
+### Roon 设置步骤
+
+1. 打开 Roon
+2. 进入 `Settings` -> `Extensions`
+3. 启用扩展（显示名：`CoverArt_docker`）
+4. 在扩展设置中选择播放区（Zone）
+5. 开始播放音乐，网页将显示封面与曲目信息
+
+### 持久化与权限注意事项
+
+- `config.json` 必须持久化挂载，否则容器重建/重启后可能需要重新授权
+- `images/` 需要可写权限，用于保存专辑封面
+
+### 常用命令
+
+```bash
+docker logs -f roon-coverart
+docker restart roon-coverart
+docker ps -a --filter name=roon-coverart
+```
+
+### 源码构建（可选）
+
+```bash
+docker build -t roon-coverart:16.9-local .
+```
+
+---
+
+## English
+
+### Features
+
+- Real-time now-playing album art display
+- Track info display (title / artist / album)
+- Dominant color extraction for ambient background
+- Automatically switches to Art Wall mode about 15s after playback stops
+- Art Wall refreshes 3 images every 60 seconds
+- Auto-saves played album art to `images/`
+- Persistent Roon pairing token via `config.json` (avoids re-authorization after restart)
+
+### Docker Images
+
+- `epochaudio/coverart_docker:5.0.1`
+- `epochaudio/coverart_docker:latest`
+
+### Quick Start (Docker Run)
+
+1. Prepare directories and config files
+
+```bash
+mkdir -p images config
+printf '%s\n' '{}' > config.json
+cat > config/local.json <<'EOF'
+{
+  "server": {
+    "port": 3666
+  },
+  "artwork": {
+    "saveDir": "./images",
+    "autoSave": true,
+    "format": "jpg"
+  }
+}
+EOF
+```
+
+2. Run the container (recommended persistent mounts)
+
+```bash
+docker run -d \
+  --name roon-coverart \
+  --network host \
+  --restart unless-stopped \
+  -v $(pwd)/images:/app/images \
+  -v $(pwd)/config/local.json:/app/config/local.json:ro \
+  -v $(pwd)/config.json:/app/config.json:rw \
+  epochaudio/coverart_docker:latest
+```
+
+3. Open the UI
+
+- Default URL: `http://localhost:3666`
+
+### Docker Compose (Recommended)
+
+```yaml
+version: '3'
+
+services:
+  coverart:
+    image: epochaudio/coverart_docker:latest
+    # Keep build: . if you want local builds
+    build: .
+    network_mode: "host"
+    restart: unless-stopped
+    volumes:
+      - ./images:/app/images:rw
+      - ./config/local.json:/app/config/local.json:ro
+      - ./config.json:/app/config.json:rw
+```
+
+Start:
+
+```bash
+docker compose up -d
+```
+
+### Configuration (Recommended in `config/local.json`)
+
+- `server.port`: Web server port (default `3666`)
+- `artwork.saveDir`: Artwork save directory (default `./images`)
+- `artwork.autoSave`: Enable auto-save (default `true`)
+- `artwork.format`: Save format (`jpg` or `png`, default `jpg`)
+
+Environment variables are also supported:
+- `SERVER_PORT`
+- `ARTWORK_SAVEDIR`
+- `ARTWORK_AUTOSAVE`
+- `ARTWORK_FORMAT`
+
+Notes:
+- Put stable parameters in `config/local.json`
+- Keep root `config.json` for Roon pairing token/state persistence
+
+### Roon Setup
+
+1. Open Roon
+2. Go to `Settings` -> `Extensions`
+3. Enable the extension (`CoverArt_docker`)
+4. Select the playback zone in extension settings
+5. Start playing music and open the web page
+
+### Persistence & Permissions
+
+- Persist `config.json`, or you may need to re-authorize after container recreation/restart
+- `images/` must be writable so artwork can be saved
+
+### Useful Commands
+
+```bash
+docker logs -f roon-coverart
+docker restart roon-coverart
+docker ps -a --filter name=roon-coverart
+```
+
+### Build From Source (Optional)
+
+```bash
+docker build -t roon-coverart:16.9-local .
+```
+
+## License
+
+MIT (see `package.json`)

@@ -1,0 +1,12 @@
+// Copy this file to "local.json" and change values as desired.
+
+{
+  "server": {
+    "port": 3666
+  },
+  "artwork": {
+    "saveDir": "./images",
+    "autoSave": true,
+    "format": "jpg"
+  }
+}

@@ -1,0 +1,45 @@
+# 依赖目录
+node_modules
+npm-debug.log
+
+# 版本控制
+.git
+.gitignore
+
+# IDE 和编辑器文件
+.idea
+.vscode
+*.swp
+*.swo
+
+# 日志文件
+logs
+*.log
+
+# 测试文件
+test
+coverage
+
+# 环境变量文件
+.env
+.env.*
+
+# 文档和其他不需要的文件
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+
+# 开发和调试文件
+.DS_Store
+.cursorrules
+.claude
+
+# 图片目录
+images/ 
+
+# 运行时生成文件（包含 Roon 配对状态）
+config.json
+
+# 本机固定参数（通过 volume 挂载）
+config/local.json

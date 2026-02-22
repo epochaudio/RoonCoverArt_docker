@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <title>Music will keep us alive</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="apple-touch-icon" href="/favicons/apple-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon" href="/favicons/favicon.ico" type="image/x-icon" />
+    <link rel="icon" href="/favicons/favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" type="text/css" href="/css/site.css" />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/jquery/jquery.min.js"></script>
+    <script src="/js-cookie/js.cookie.js"></script>
+    <script src="/js/color-thief.js"></script>
+    <script src="/js/index.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/NoSleep.min.js"></script>
+    <script>
+      function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+            console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+          });
+        }
+      }
+
+      document.addEventListener('dblclick', toggleFullScreen);
+    </script>
+    <style>
+      :root {
+        --layer-background: 1;
+        --layer-content: 2;
+        --layer-overlay: 3;
+        --wall-padding: clamp(12px, 1.5vw, 24px);    /* 增加边距 */
+        --grid-gap: clamp(8px, 1vw, 16px);           /* 增加间距 */
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000;
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* 隐藏所有默认的浏览器UI元素 */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* 背景层 */
+      #coverBackground {
+        position: fixed;
+        inset: 0;
+        z-index: var(--layer-background);
+        background-size: cover;
+        background-position: center;
+        opacity: 0.75;
+        filter: blur(18px);
+        pointer-events: none;
+        transition: all 0.5s ease;
+      }
+
+      #colorBackground {
+        position: fixed;
+        inset: 0;
+        z-index: var(--layer-background);
+        background-color: rgba(0, 0, 0, 0.19);
+        pointer-events: none;
+        transition: all 0.5s ease;
+      }
+
+      /* 共享布局样式 */
+      .fullscreen-container,
+      .grid-container,
+      #pairDisabled {
+        position: fixed;
+        inset: 0;
+        z-index: var(--layer-content);
+        width: 100%;
+        height: 100%;
+      }
+
+      /* 播放状态容器 */
+      .fullscreen-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+      }
+
+      .fullscreen-container.hidden,
+      .grid-container.hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        z-index: -1;
+        position: absolute;
+      }
+
+      #coverImage {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 95vh;
+        object-fit: contain;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+        transform: translateZ(0);
+      }
+
+      /* 网格显示相关样式 */
+      .grid-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: calc(100% - 2 * var(--wall-padding));
+        height: min(calc(200vw - 2 * var(--wall-padding)), calc(100vh - 2 * var(--wall-padding)));
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+        gap: var(--grid-gap);
+        padding: var(--wall-padding);
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+
+      .grid-item {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1/1;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .grid-item .flipper {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 0.6s;
+      }
+
+      .grid-item img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        backface-visibility: hidden;
+      }
+
+      /* 确保背面图片也使用相同的显示方式 */
+      .grid-item .front,
+      .grid-item .back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+
+      .grid-item .front {
+        z-index: 2;
+      }
+
+      .grid-item .back {
+        transform: rotateY(-180deg);
+      }
+
+      .grid-item.flip .flipper {
+        transform: rotateY(180deg);
+      }
+
+      /* 等待授权提示 */
+      #pairDisabled {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.9);
+        color: white;
+        z-index: var(--layer-overlay);
+      }
+
+      #pairDisabled .messages {
+        text-align: center;
+        padding: 20px;
+      }
+
+      #pairDisabled h2 {
+        margin-bottom: 1em;
+      }
+
+      #pairDisabled p {
+        margin: 0.5em 0;
+        opacity: 0.8;
+      }
+
+      .buttonOverlay {
+        width: 96px;
+        height: 48px;
+        font-weight: bold;
+        border: none;
+        border-radius: 10px;
+        -webkit-filter: drop-shadow(5px 5px 5px black);
+        filter: drop-shadow(5px 5px 5px black);
+        margin: 32px;
+        background-color: #eff0f1;
+        color: #232629;
+      }
+
+      .overlayContent {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #232629;
+        color: #eff0f1;
+        width: 640px;
+        height: auto;
+        max-height: 95%;
+        max-width: 95%;
+        border-radius: 10px;
+        padding: 5px;
+        -webkit-filter: drop-shadow(10px 10px 10px black);
+        filter: drop-shadow(10px 10px 10px black);
+        z-index: 300;
+        overflow-y: scroll;
+      }
+
+      /* 竖屏布局优化 */
+      @media screen and (orientation: portrait) {
+        .grid-container {
+          width: calc(100% - 2 * var(--wall-padding));
+          height: auto;
+          aspect-ratio: 1/2;
+          max-height: calc(100vh - 2 * var(--wall-padding));
+          grid-template-columns: repeat(2, 1fr);
+          grid-template-rows: repeat(4, 1fr);
+        }
+      }
+
+      /* 横屏布局优化 */
+      @media screen and (orientation: landscape) {
+        .grid-container {
+          width: auto;
+          height: calc(100vh - 2 * var(--wall-padding));
+          aspect-ratio: 2/1;
+          max-width: calc(100vw - 2 * var(--wall-padding));
+          grid-template-columns: repeat(4, 1fr);
+          grid-template-rows: repeat(2, 1fr);
+        }
+
+        .grid-item {
+          width: 100%;
+          height: 100%;
+        }
+
+        .grid-item img {
+          object-fit: cover;
+          width: 100%;
+          height: 100%;
+        }
+      }
+
+      @media screen and (min-aspect-ratio: 16/9) {
+        #coverImage {
+          max-height: 95vh;
+          max-width: calc(95vh * 16/9);  /* 保持16:9比例 */
+        }
+      }
+
+      @media screen and (max-aspect-ratio: 9/16) {
+        #coverImage {
+          max-width: 95vw;
+          max-height: calc(95vw * 16/9);  /* 保持16:9比例 */
+        }
+        
+        .fullscreen-container {
+          padding: 2vh 0;  /* 添加适当的上下内边距 */
+        }
+      }
+
+      @media screen and (min-aspect-ratio: 9/16) and (max-aspect-ratio: 16/9) {
+        #coverImage {
+          max-width: 95vw;
+          max-height: 95vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="colorBackground"></div>
+
+    <div class="grid-container hidden">
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+      <div class="grid-item">
+        <div class="flipper">
+          <img class="front" src="/img/transparent.png" alt="Album Cover">
+          <img class="back" src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+    </div>
+
+    <div id="playingContainer" class="fullscreen-container">
+      <img id="coverImage" src="/img/transparent.png" alt="Album Cover">
+    </div>
+
+    <div id="pairDisabled">
+      <div class="messages">
+        <h2>等待 Roon Core 授权</h2>
+        <p>请在 Roon Core 设置中启用此扩展</p>
+        <p>设置 → 扩展 → 启用 Cover Art </p>
+      </div>
+    </div>
+  </body>
+</html>

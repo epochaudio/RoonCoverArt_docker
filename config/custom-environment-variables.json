@@ -1,0 +1,10 @@
+{
+  "server": {
+    "port": "SERVER_PORT"
+  },
+  "artwork": {
+    "saveDir": "ARTWORK_SAVEDIR",
+    "autoSave": "ARTWORK_AUTOSAVE",
+    "format": "ARTWORK_FORMAT"
+  }
+}

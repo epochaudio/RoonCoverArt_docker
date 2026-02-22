@@ -1,0 +1,35 @@
+{
+  "name": "CoverArt",
+  "version": "5.0.1",
+  "description": "CoverArt",
+  "main": "app.js",
+  "author": "门耳朵制作",
+  "license": "MIT",
+  "engines": {
+    "node": ">=6.x"
+  },
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "colorthief": "^2.4.0",
+    "command-line-args": "^5.1.1",
+    "command-line-usage": "^6.1.0",
+    "config": "^3.3.1",
+    "express": "4.x",
+    "jquery": "^3.5.1",
+    "js-cookie": "^2.2.1",
+    "node-roon-api": "github:roonlabs/node-roon-api",
+    "node-roon-api-browse": "github:roonlabs/node-roon-api-browse",
+    "node-roon-api-image": "github:roonlabs/node-roon-api-image",
+    "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
+    "node-roon-api-status": "github:roonlabs/node-roon-api-status",
+    "node-roon-api-transport": "github:roonlabs/node-roon-api-transport",
+    "socket.io": "^2.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://shop236654229.taobao.com/"
+  }
+}

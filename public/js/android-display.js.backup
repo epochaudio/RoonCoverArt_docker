@@ -1,0 +1,163 @@
+/**
+ * Android风格显示管理器
+ * 实现播放模式和封面墙模式的切换，以及Roon数据绑定
+ */
+class AndroidDisplayManager {
+    constructor() {
+        this.currentMode = 'grid'; // 'playing' | 'grid'
+        this.playingModeElement = document.getElementById('playingContainer');
+        this.gridModeElement = document.querySelector('.grid-container');
+        this.switchTimeout = null;
+        this.currentData = {};
+        
+        // 获取文本元素
+        this.trackTextElement = document.getElementById('trackText');
+        this.artistTextElement = document.getElementById('artistText');
+        this.albumTextElement = document.getElementById('albumText');
+        this.coverImageElement = document.getElementById('coverImage');
+        
+        this.initializeDisplay();
+    }
+    
+    initializeDisplay() {
+        // 默认显示封面墙模式
+        this.showGridMode();
+        
+        // 监听Socket.IO事件（如果存在）
+        if (typeof socket !== 'undefined') {
+            this.initSocketConnection();
+        }
+    }
+    
+    initSocketConnection() {
+        // 监听播放状态
+        socket.on('nowplaying', (data) => {
+            console.log('收到nowplaying事件:', data);
+            this.showPlayingMode(data);
+        });
+        
+        // 监听停止播放 - 5秒后切换到封面墙
+        socket.on('notPlaying', () => {
+            console.log('收到notPlaying事件');
+            this.scheduleGridModeSwitch();
+        });
+        
+        socket.on('zoneStatus', (zones) => {
+            if (!zones || zones.length === 0) return;
+            
+            const activeZone = zones[0]; // 使用第一个区域
+            console.log('收到zoneStatus事件:', activeZone);
+            
+            if (activeZone?.state === 'playing' && activeZone.now_playing) {
+                this.showPlayingMode(activeZone.now_playing);
+            } else {
+                this.scheduleGridModeSwitch();
+            }
+        });
+    }
+    
+    showPlayingMode(nowPlaying) {
+        console.log('切换到播放模式:', nowPlaying);
+        
+        // 取消封面墙切换计时器
+        if (this.switchTimeout) {
+            clearTimeout(this.switchTimeout);
+            this.switchTimeout = null;
+        }
+        
+        // 更新曲目信息
+        this.updateTrackInfo(nowPlaying);
+        
+        // 切换到播放模式
+        if (this.currentMode !== 'playing') {
+            this.playingModeElement.classList.remove('hidden');
+            this.gridModeElement.classList.add('hidden');
+            this.currentMode = 'playing';
+            console.log('已切换到播放模式');
+        }
+    }
+    
+    scheduleGridModeSwitch() {
+        console.log('计划5秒后切换到封面墙模式');
+        // 5秒后切换到封面墙（从15秒改为5秒）
+        this.switchTimeout = setTimeout(() => {
+            this.showGridMode();
+        }, 5000);
+    }
+    
+    showGridMode() {
+        console.log('切换到封面墙模式');
+        this.playingModeElement.classList.add('hidden');
+        this.gridModeElement.classList.remove('hidden');
+        this.currentMode = 'grid';
+    }
+    
+    updateTrackInfo(nowPlaying) {
+        const displayData = this.mapRoonData(nowPlaying);
+        console.log('更新曲目信息:', displayData);
+        
+        // 更新文本内容
+        if (this.trackTextElement) {
+            this.trackTextElement.textContent = displayData.trackText;
+        }
+        if (this.artistTextElement) {
+            this.artistTextElement.textContent = displayData.artistText;
+        }
+        if (this.albumTextElement) {
+            this.albumTextElement.textContent = displayData.albumText;
+        }
+        
+        // 更新专辑封面
+        if (displayData.imageKey && this.coverImageElement) {
+            const imageUrl = `/roonapi/getImage?image_key=${displayData.imageKey}`;
+            this.coverImageElement.src = imageUrl;
+            console.log('更新专辑封面:', imageUrl);
+        }
+        
+        this.currentData = displayData;
+    }
+    
+    mapRoonData(nowPlaying) {
+        // 映射Roon数据到显示格式：艺术家 → 曲目名称 → 专辑名称
+        return {
+            trackText: nowPlaying?.three_line?.line1 || "", // 艺术家（第一行显示）
+            artistText: nowPlaying?.three_line?.line2 || "", // 曲目名称（第二行显示）
+            albumText: nowPlaying?.three_line?.line3 || nowPlaying?.album || "", // 专辑名称（第三行显示）
+            imageKey: nowPlaying?.image_key
+        };
+    }
+    
+    // 手动切换模式（用于测试）
+    toggleMode() {
+        if (this.currentMode === 'playing') {
+            this.showGridMode();
+        } else {
+            // 模拟播放数据进行测试
+            const testData = {
+                three_line: {
+                    line1: "测试艺术家",
+                    line2: "测试歌曲标题",
+                    line3: "测试专辑名称"
+                },
+                image_key: null
+            };
+            this.showPlayingMode(testData);
+        }
+    }
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('初始化Android显示管理器');
+    window.androidDisplayManager = new AndroidDisplayManager();
+    
+    // 添加调试功能 - 按空格键切换模式
+    document.addEventListener('keydown', function(event) {
+        if (event.code === 'Space') {
+            event.preventDefault();
+            window.androidDisplayManager.toggleMode();
+        }
+    });
+    
+    console.log('Android显示管理器初始化完成。按空格键可切换显示模式进行测试。');
+});

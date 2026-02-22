@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <title>Music will keep us alive</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="apple-touch-icon" href="/favicons/apple-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon" href="/favicons/favicon.ico" type="image/x-icon" />
+    <link rel="icon" href="/favicons/favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" type="text/css" href="/css/site.css" />
+    <link rel="stylesheet" type="text/css" href="/css/android-styles.css" />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/jquery/jquery.min.js"></script>
+    <script src="/js-cookie/js.cookie.js"></script>
+    <script src="/js/color-thief.js"></script>
+    <script src="/js/index.js"></script>
+    <script src="/js/responsive-fonts.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/NoSleep.min.js"></script>
+    <script>
+      function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+            console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+          });
+        }
+      }
+      document.addEventListener('dblclick', toggleFullScreen);
+    </script>
+    <style>
+      /*
+       * Android 8.0 WebView兼容性优化说明：
+       * 1. 使用Flexbox + Grid混合布局替代复杂定位
+       * 2. 用calc() + max-width/max-height替代min()函数  
+       * 3. 用媒体查询替代clamp()函数
+       * 4. 简化CSS过渡动画，避免3D变换
+       * 5. 保持CSS变量支持（Android 7.0+）
+       * 6. 用传统定位替代inset属性
+       * 7. 用padding-bottom技巧替代aspect-ratio
+       */
+      :root {
+        --layer-background: 1;
+        --layer-content: 2;
+        --layer-overlay: 3;
+        /* Android 8.0兼容：使用媒体查询替代clamp() */
+        --wall-padding: 16px;    /* 中等边距 */
+        --grid-gap: 10px;        /* 中等间距 */
+      }
+
+      /* 小屏幕设备使用较小的边距和间距 */
+      @media screen and (max-width: 480px) {
+        :root {
+          --wall-padding: 12px;
+          --grid-gap: 8px;
+        }
+      }
+
+      /* 大屏幕设备使用较大的边距和间距 */
+      @media screen and (min-width: 1200px) {
+        :root {
+          --wall-padding: 24px;
+          --grid-gap: 16px;
+        }
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000;
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* 隐藏所有默认的浏览器UI元素 */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* 背景层 */
+      #coverBackground {
+        position: fixed;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: var(--layer-background);
+        background-size: cover;
+        background-position: center;
+        opacity: 0.75;
+        filter: blur(18px);
+        pointer-events: none;
+        transition: all 0.5s ease;
+      }
+
+      #colorBackground {
+        position: fixed;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: var(--layer-background);
+        background-color: rgba(0, 0, 0, 0.19);
+        pointer-events: none;
+        transition: all 0.5s ease;
+      }
+
+      /* 共享布局样式 */
+      .fullscreen-container,
+      .grid-wrapper,
+      #pairDisabled {
+        position: fixed;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: var(--layer-content);
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Android风格播放模式容器 */
+      .playing-mode {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+        background: #000000;
+      }
+      
+      .main-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+      }
+      
+      /* 响应式布局：横屏模式 */
+      @media (orientation: landscape) {
+        .main-container {
+          flex-direction: row;
+        }
+        
+        .album-cover-container {
+          width: 65%;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          padding: 2vh 0 2vh 3vw;
+        }
+        
+        .track-info-container {
+          width: 35%;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 2vh 3vw 2vh 1vw;
+          text-align: left;
+        }
+      }
+      
+      /* 响应式布局：竖屏模式 */
+      @media (orientation: portrait) {
+        .main-container {
+          flex-direction: column;
+        }
+        
+        .album-cover-container {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 5vh 4vw 2vh 4vw;
+        }
+        
+        .track-info-container {
+          height: 35vh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          text-align: center;
+          padding: 0 4vw 5vh 4vw;
+        }
+      }
+
+      .playing-mode.hidden,
+      .grid-wrapper.hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        z-index: -1;
+        position: absolute;
+      }
+
+      /* Android风格专辑封面样式 */
+      .album-art {
+        object-fit: cover;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.12);
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+        
+      }
+      
+      /* 横屏模式专辑封面尺寸 */
+      @media (orientation: landscape) {
+        .album-art {
+          max-width: 65vh;
+          max-height: 65vh;
+          width: auto;
+          height: auto;
+        }
+      }
+      
+      /* 竖屏模式专辑封面尺寸 */
+      @media (orientation: portrait) {
+        .album-art {
+          max-width: 85vw;
+          max-height: 85vw;
+          width: auto;
+          height: auto;
+        }
+      }
+
+      /* 外层flexbox容器用于居中 - Android 8.0完全兼容 */
+      .grid-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--wall-padding);
+        box-sizing: border-box;
+      }
+
+      /* 内层网格容器 - Android 8.0完全支持Grid布局 */
+      .grid-container {
+        display: grid;
+        gap: var(--grid-gap);
+        --aspect-width: 3;
+        --aspect-height: 5;
+      }
+
+      .grid-item {
+        position: relative;
+        width: 100%;
+        
+        height: 0; padding-bottom: 100%; /* 1:1 aspect ratio */
+        overflow: hidden;
+        
+        
+        
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+
+      .grid-item img {
+        position: absolute; top: 0; left: 0; width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        opacity: 1;
+        -webkit-transition: opacity 0.5s ease;
+        -moz-transition: opacity 0.5s ease;
+        -o-transition: opacity 0.5s ease;
+        transition: opacity 0.5s ease;
+      }
+
+      /* 淡入淡出动画效果 - 兼容Android 8.0 WebView */
+      .grid-item.updating img {
+        opacity: 0;
+      }
+
+      /* 等待授权提示 */
+      #pairDisabled {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.9);
+        color: white;
+        z-index: var(--layer-overlay);
+      }
+
+      #pairDisabled .messages {
+        text-align: center;
+        padding: 20px;
+      }
+
+      #pairDisabled h2 {
+        margin-bottom: 1em;
+      }
+
+      #pairDisabled p {
+        margin: 0.5em 0;
+        opacity: 0.8;
+      }
+
+      .buttonOverlay {
+        width: 96px;
+        height: 48px;
+        font-weight: bold;
+        border: none;
+        border-radius: 10px;
+        -webkit-filter: drop-shadow(5px 5px 5px black);
+        filter: drop-shadow(5px 5px 5px black);
+        margin: 32px;
+        background-color: #eff0f1;
+        color: #232629;
+      }
+
+      .overlayContent {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #232629;
+        color: #eff0f1;
+        width: 640px;
+        height: auto;
+        max-height: 95%;
+        max-width: 95%;
+        border-radius: 10px;
+        padding: 5px;
+        -webkit-filter: drop-shadow(10px 10px 10px black);
+        filter: drop-shadow(10px 10px 10px black);
+        z-index: 300;
+        overflow-y: scroll;
+      }
+
+      /* 竖屏模式：3列5行 - Android 8.0兼容 */
+      @media (orientation: portrait) {
+        .grid-container {
+          --aspect-width: 3;
+          --aspect-height: 5;
+          grid-template-columns: repeat(3, 1fr);
+          grid-template-rows: repeat(5, 1fr);
+          /* 使用兼容的calc计算替代min()函数 */
+          width: calc(100vw - 2 * var(--wall-padding));
+          max-width: calc((100vh - 2 * var(--wall-padding)) * 0.6); /* 3/5 = 0.6 */
+          height: calc(100vh - 2 * var(--wall-padding));
+          max-height: calc((100vw - 2 * var(--wall-padding)) * 1.67); /* 5/3 ≈ 1.67 */
+        }
+      }
+
+      /* 横屏模式：5列3行 - Android 8.0兼容 */
+      @media (orientation: landscape) {
+        .grid-container {
+          --aspect-width: 5;
+          --aspect-height: 3;
+          grid-template-columns: repeat(5, 1fr);
+          grid-template-rows: repeat(3, 1fr);
+          /* 使用兼容的calc计算替代min()函数 */
+          width: calc(100vw - 2 * var(--wall-padding));
+          max-width: calc((100vh - 2 * var(--wall-padding)) * 1.67); /* 5/3 ≈ 1.67 */
+          height: calc(100vh - 2 * var(--wall-padding));
+          max-height: calc((100vw - 2 * var(--wall-padding)) * 0.6); /* 3/5 = 0.6 */
+        }
+      }
+
+      @media screen and (min-aspect-ratio: 16/9) {
+        #coverImage {
+          max-height: 95vh;
+          max-width: calc(95vh * 16/9);  /* 保持16:9比例 */
+        }
+      }
+
+      @media screen and (max-aspect-ratio: 9/16) {
+        #coverImage {
+          max-width: 95vw;
+          max-height: calc(95vw * 16/9);  /* 保持16:9比例 */
+        }
+        
+        .fullscreen-container {
+          padding: 2vh 0;  /* 添加适当的上下内边距 */
+        }
+      }
+
+      @media screen and (min-aspect-ratio: 9/16) and (max-aspect-ratio: 16/9) {
+        #coverImage {
+          max-width: 95vw;
+          max-height: 95vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="colorBackground"></div>
+
+    <div class="grid-wrapper hidden">
+      <div class="grid-container">
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+        <div class="grid-item">
+          <img src="/img/transparent.png" alt="Album Cover">
+        </div>
+      </div>
+    </div>
+
+    <!-- Android风格播放模式：专辑封面 + 曲目信息 -->
+    <!-- 支持大小画屏模式：21.5寸(1080*1920)和10寸(800*1280) -->
+    <div id="playingContainer" class="playing-mode">
+      <div class="main-container">
+        <!-- 专辑封面容器 -->
+        <div class="album-cover-container">
+          <img id="coverImage" class="album-art" src="/img/transparent.png" alt="专辑封面">
+        </div>
+        
+        <!-- 曲目信息容器 - 支持画屏模式差异化显示 -->
+        <div class="track-info-container">
+          <div class="track-title" id="trackText"></div>
+          <div class="artist-name" id="artistText"></div>
+          <div class="album-name" id="albumText"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="pairDisabled">
+      <div class="messages">
+        <h2>等待 Roon Core 授权</h2>
+        <p>请在 Roon Core 设置中启用此扩展</p>
+        <p>设置 → 扩展 → 启用 Cover Art </p>
+      </div>
+    </div>
+  </body>
+</html>

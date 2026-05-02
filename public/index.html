@@ -42,9 +42,10 @@
        * 7. 用padding-bottom技巧替代aspect-ratio
        */
       :root {
-        --layer-background: 1;
-        --layer-content: 2;
-        --layer-overlay: 3;
+	        --layer-background: 1;
+	        --layer-content: 2;
+	        --layer-overlay: 3;
+	        --layer-feedback: 4;
         /* Android 8.0兼容：使用媒体查询替代clamp() */
         --wall-padding: 16px;    /* 中等边距 */
         --grid-gap: 10px;        /* 中等间距 */
@@ -94,14 +95,136 @@
         transition: all 0.5s ease;
       }
 
-      #colorBackground {
+	      #colorBackground {
         position: fixed;
         top: 0; right: 0; bottom: 0; left: 0;
         z-index: var(--layer-background);
         background-color: rgba(0, 0, 0, 0.19);
         pointer-events: none;
-        transition: all 0.5s ease;
-      }
+	        transition: all 0.5s ease;
+	      }
+
+	      #gestureFeedback {
+	        position: fixed;
+	        top: 0; right: 0; bottom: 0; left: 0;
+	        z-index: var(--layer-feedback);
+	        pointer-events: none;
+	        overflow: hidden;
+	      }
+
+	      .gesture-ripple {
+	        position: absolute;
+	        width: 28px;
+	        height: 28px;
+	        margin-left: -14px;
+	        margin-top: -14px;
+	        border-radius: 50%;
+	        background: rgba(255, 255, 255, 0.16);
+	        border: 1px solid rgba(255, 255, 255, 0.36);
+	        transform: scale(0.4);
+	        opacity: 0.85;
+	        animation: gestureRipple 520ms ease-out forwards;
+	      }
+
+	      .gesture-cue {
+	        position: absolute;
+	        top: 50%;
+	        left: 50%;
+	        width: 78px;
+	        height: 78px;
+	        margin-left: -39px;
+	        margin-top: -39px;
+	        border-radius: 50%;
+	        display: flex;
+	        align-items: center;
+	        justify-content: center;
+	        color: rgba(255, 255, 255, 0.92);
+	        background: rgba(0, 0, 0, 0.42);
+	        border: 1px solid rgba(255, 255, 255, 0.22);
+	        box-shadow: 0 0 32px rgba(255, 255, 255, 0.14);
+	        font-size: 40px;
+	        line-height: 1;
+	        opacity: 0;
+	        transform: scale(0.82);
+	        animation: gestureCue 720ms ease-out forwards;
+	      }
+
+	      .gesture-cue.next {
+	        box-shadow: 0 0 36px rgba(77, 166, 255, 0.34);
+	      }
+
+	      .gesture-cue.prev {
+	        box-shadow: 0 0 36px rgba(255, 214, 102, 0.32);
+	      }
+
+	      .gesture-cue.stop {
+	        box-shadow: 0 0 36px rgba(255, 88, 88, 0.34);
+	      }
+
+	      .gesture-cue.play {
+	        box-shadow: 0 0 36px rgba(84, 214, 137, 0.34);
+	      }
+
+	      .gesture-flash {
+	        position: absolute;
+	        top: 0; right: 0; bottom: 0; left: 0;
+	        opacity: 0;
+	        animation: gestureFlash 360ms ease-out forwards;
+	      }
+
+	      .gesture-flash.next {
+	        background: linear-gradient(to left, rgba(77, 166, 255, 0.20), rgba(77, 166, 255, 0));
+	      }
+
+	      .gesture-flash.prev {
+	        background: linear-gradient(to right, rgba(255, 214, 102, 0.18), rgba(255, 214, 102, 0));
+	      }
+
+	      .gesture-flash.stop {
+	        background: linear-gradient(to bottom, rgba(255, 88, 88, 0.18), rgba(255, 88, 88, 0));
+	      }
+
+	      .gesture-flash.play {
+	        background: linear-gradient(to top, rgba(84, 214, 137, 0.18), rgba(84, 214, 137, 0));
+	      }
+
+	      @keyframes gestureRipple {
+	        0% {
+	          transform: scale(0.4);
+	          opacity: 0.85;
+	        }
+	        100% {
+	          transform: scale(5.4);
+	          opacity: 0;
+	        }
+	      }
+
+	      @keyframes gestureCue {
+	        0% {
+	          opacity: 0;
+	          transform: scale(0.82);
+	        }
+	        18% {
+	          opacity: 1;
+	          transform: scale(1.04);
+	        }
+	        100% {
+	          opacity: 0;
+	          transform: scale(1.18);
+	        }
+	      }
+
+	      @keyframes gestureFlash {
+	        0% {
+	          opacity: 0;
+	        }
+	        20% {
+	          opacity: 1;
+	        }
+	        100% {
+	          opacity: 0;
+	        }
+	      }
 
       /* 共享布局样式 */
       .fullscreen-container,
@@ -378,10 +501,11 @@
       }
     </style>
   </head>
-  <body>
-    <div id="colorBackground"></div>
+	  <body>
+	    <div id="colorBackground"></div>
+	    <div id="gestureFeedback"></div>
 
-    <div class="grid-wrapper hidden">
+	    <div class="grid-wrapper hidden">
       <div class="grid-container">
         <div class="grid-item">
           <img src="/img/transparent.png" alt="Album Cover">

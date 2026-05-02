@@ -25,12 +25,13 @@ Compared with the square-frame version, this build focuses on:
 - 根据封面提取主色调作为背景氛围色
 - 播放停止后约 15 秒自动切换到 Art Wall 模式
 - Art Wall 每 60 秒刷新 3 张图片
+- 支持键盘、媒体键和带视觉反馈的触摸手势控制（左滑下一曲、右滑上一曲、上滑停止、下滑播放）
 - 自动保存播放过的专辑封面到 `images/`
 - Roon 配对 token 持久化（通过 `config.json`，避免重启后重复授权）
 
 ### Docker 镜像
 
-- `epochaudio/coverart_docker:5.0.1`
+- `epochaudio/coverart_docker:5.0.2`
 - `epochaudio/coverart_docker:latest`
 
 ### 快速安装（Docker Run）
@@ -68,16 +69,23 @@ docker run -d \
 ### Docker Compose（推荐）
 
 ```yaml
-version: '3'
-
 services:
   coverart:
-    image: epochaudio/coverart_docker:latest
+    build:
+      context: .
+    image: roon-coverart:5.0.2-local
+    container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
+      - ./config/local.json:/app/config/local.json:ro
 ```
 
 启动：
@@ -101,6 +109,13 @@ cat > config/local.json <<'EOF'
     "saveDir": "./images",
     "autoSave": true,
     "format": "jpg"
+  },
+  "access": {
+    "token": "",
+    "allowedOrigins": []
+  },
+  "logging": {
+    "level": "info"
   }
 }
 EOF
@@ -124,12 +139,18 @@ Docker Compose 增加：
 - `artwork.saveDir`: 封面保存目录（默认 `./images`）
 - `artwork.autoSave`: 是否自动保存封面（默认 `true`）
 - `artwork.format`: 保存格式（`jpg` 或 `png`，默认 `jpg`）
+- `access.token`: 可选访问令牌；配置后 Socket.IO 连接需要通过 URL `?token=` 传入
+- `access.allowedOrigins`: 可选跨域来源白名单；环境变量中多个来源用逗号分隔
+- `logging.level`: 日志级别，支持 `error` / `warn` / `info` / `debug`，默认 `info`
 
 也支持环境变量（Docker）：
 - `SERVER_PORT`
 - `ARTWORK_SAVEDIR`
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
+- `ACCESS_TOKEN`
+- `ACCESS_ALLOWED_ORIGINS`
+- `LOG_LEVEL`
 
 说明：
 - 固定参数建议放在 `config/local.json`
@@ -159,7 +180,7 @@ docker ps -a --filter name=roon-coverart
 ### 源码构建（可选）
 
 ```bash
-docker build -t roon-coverart:16.9-local .
+docker build -t roon-coverart:5.0.2-local .
 ```
 
 ---
@@ -173,12 +194,13 @@ docker build -t roon-coverart:16.9-local .
 - Dominant color extraction for ambient background
 - Automatically switches to Art Wall mode about 15s after playback stops
 - Art Wall refreshes 3 images every 60 seconds
+- Keyboard, media-key, and visual touch gesture controls (swipe left for next, right for previous, up to stop, down to play)
 - Auto-saves played album art to `images/`
 - Persistent Roon pairing token via `config.json` (avoids re-authorization after restart)
 
 ### Docker Images
 
-- `epochaudio/coverart_docker:5.0.1`
+- `epochaudio/coverart_docker:5.0.2`
 - `epochaudio/coverart_docker:latest`
 
 ### Quick Start (Docker Run)
@@ -216,16 +238,23 @@ docker run -d \
 ### Docker Compose (Recommended)
 
 ```yaml
-version: '3'
-
 services:
   coverart:
-    image: epochaudio/coverart_docker:latest
+    build:
+      context: .
+    image: roon-coverart:5.0.2-local
+    container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
+      - ./config/local.json:/app/config/local.json:ro
 ```
 
 Start:
@@ -249,6 +278,13 @@ cat > config/local.json <<'EOF'
     "saveDir": "./images",
     "autoSave": true,
     "format": "jpg"
+  },
+  "access": {
+    "token": "",
+    "allowedOrigins": []
+  },
+  "logging": {
+    "level": "info"
   }
 }
 EOF
@@ -272,12 +308,18 @@ Add this line to Docker Compose:
 - `artwork.saveDir`: Artwork save directory (default `./images`)
 - `artwork.autoSave`: Enable auto-save (default `true`)
 - `artwork.format`: Save format (`jpg` or `png`, default `jpg`)
+- `access.token`: Optional access token; if set, pass it as URL `?token=` for Socket.IO access
+- `access.allowedOrigins`: Optional CORS origin allowlist; comma-separated when set by env var
+- `logging.level`: Log level, one of `error` / `warn` / `info` / `debug`, default `info`
 
 Environment variables are also supported:
 - `SERVER_PORT`
 - `ARTWORK_SAVEDIR`
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
+- `ACCESS_TOKEN`
+- `ACCESS_ALLOWED_ORIGINS`
+- `LOG_LEVEL`
 
 Notes:
 - Put stable parameters in `config/local.json`
@@ -307,7 +349,7 @@ docker ps -a --filter name=roon-coverart
 ### Build From Source (Optional)
 
 ```bash
-docker build -t roon-coverart:16.9-local .
+docker build -t roon-coverart:5.0.2-local .
 ```
 
 ## License

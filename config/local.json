@@ -6,5 +6,12 @@
     "saveDir": "./images",
     "autoSave": true,
     "format": "jpg"
+  },
+  "access": {
+    "token": "",
+    "allowedOrigins": []
+  },
+  "logging": {
+    "level": "info"
   }
 }

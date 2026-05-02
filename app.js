@@ -103,6 +103,40 @@ function getNumericConfig(path, fallbackValue) {
   return fallbackValue;
 }
 
+function getStringConfig(path, fallbackValue) {
+  if (!config.has(path)) {
+    return fallbackValue;
+  }
+
+  var value = config.get(path);
+  if (typeof value === "undefined" || value === null) {
+    return fallbackValue;
+  }
+
+  return String(value).trim();
+}
+
+function getListConfig(path, fallbackValue) {
+  if (!config.has(path)) {
+    return fallbackValue;
+  }
+
+  var value = config.get(path);
+  if (Array.isArray(value)) {
+    return value.map(function(item) {
+      return String(item).trim();
+    }).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value.split(",").map(function(item) {
+      return item.trim();
+    }).filter(Boolean);
+  }
+
+  return fallbackValue;
+}
+
 function getArtworkFormat() {
   if (!config.has("artwork.format")) {
     return "jpg";
@@ -121,6 +155,73 @@ function getRoonImageFormatMime() {
 }
 
 var configPort = getNumericConfig("server.port", defaultListenPort);
+var accessToken = getStringConfig("access.token", "");
+var allowedOrigins = getListConfig("access.allowedOrigins", []);
+var configuredLogLevel = getStringConfig("logging.level", "info").toLowerCase();
+var logLevels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  debug: 3
+};
+var activeLogLevel = Object.prototype.hasOwnProperty.call(logLevels, configuredLogLevel)
+  ? configuredLogLevel
+  : "info";
+
+function shouldLog(level) {
+  return logLevels[level] <= logLevels[activeLogLevel];
+}
+
+function logDebug() {
+  if (shouldLog("debug")) {
+    console.log.apply(console, arguments);
+  }
+}
+
+function logInfo() {
+  if (shouldLog("info")) {
+    console.log.apply(console, arguments);
+  }
+}
+
+function logWarn() {
+  if (shouldLog("warn")) {
+    console.warn.apply(console, arguments);
+  }
+}
+
+function isSeekOnlyZoneChange(data) {
+  var keys = Object.keys(data || {});
+  return keys.length > 0 && keys.every(function(key) {
+    return key === "zones_seek_changed";
+  });
+}
+
+function normalizeOrigin(origin) {
+  return String(origin || "").replace(/\/+$/, "");
+}
+
+function getRequestOrigin(req) {
+  var forwardedProto = req.headers["x-forwarded-proto"];
+  var proto = forwardedProto ? String(forwardedProto).split(",")[0].trim() : "http";
+  var host = req.headers.host || "";
+  return host ? proto + "://" + host : "";
+}
+
+function isRequestOriginAllowed(req) {
+  var origin = req.headers.origin;
+  var allowAnyOrigin = allowedOrigins.indexOf("*") !== -1;
+
+  if (!origin || allowAnyOrigin) {
+    return true;
+  }
+
+  if (normalizeOrigin(origin) === normalizeOrigin(getRequestOrigin(req))) {
+    return true;
+  }
+
+  return allowedOrigins.indexOf(origin) !== -1;
+}
 
 // Determine listen port
 if (options.port) {
@@ -136,6 +237,34 @@ var http = require("http");
 var bodyParser = require("body-parser");
 
 var app = express();
+app.use(function(req, res, next) {
+  var origin = req.headers.origin;
+  var allowAnyOrigin = allowedOrigins.indexOf("*") !== -1;
+  var originAllowed = isRequestOriginAllowed(req);
+
+  if (originAllowed) {
+    if (origin) {
+      res.header("Access-Control-Allow-Origin", allowAnyOrigin ? "*" : origin);
+      res.header("Vary", "Origin");
+    } else if (allowAnyOrigin) {
+      res.header("Access-Control-Allow-Origin", "*");
+    }
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, X-CoverArt-Token, Authorization"
+    );
+    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  } else {
+    logWarn("拒绝未允许来源的跨域请求:", origin);
+  }
+
+  if (req.method === "OPTIONS") {
+    res.sendStatus(originAllowed ? 204 : 403);
+    return;
+  }
+
+  next();
+});
 app.use(express.static("public", {
     setHeaders: function(res, path) {
         if (path.endsWith('.js')) {
@@ -148,18 +277,48 @@ app.use(bodyParser.json());
 // 添加 images 目录的静态文件服务
 app.use('/images', express.static('images'));
 
-app.use(function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
-  );
-  next();
-});
-
 // Setup Socket IO
 var server = http.createServer(app);
-var io = require("socket.io").listen(server);
+var SocketIOServer = require("socket.io").Server;
+var io = new SocketIOServer(server, {
+  cors: {
+    origin: true,
+    methods: ["GET", "POST"],
+    allowedHeaders: ["X-CoverArt-Token", "Authorization", "Content-Type"]
+  },
+  allowRequest: function(req, callback) {
+    callback(null, isRequestOriginAllowed(req));
+  }
+});
+
+function getSocketAccessToken(socket) {
+  var handshake = socket.handshake || {};
+  var query = handshake.query || {};
+  var headers = handshake.headers || {};
+  var token = query.token || headers["x-coverart-token"] || "";
+  var authHeader = headers.authorization || "";
+
+  if (!token && authHeader.indexOf("Bearer ") === 0) {
+    token = authHeader.slice(7);
+  }
+
+  return String(token || "").trim();
+}
+
+io.use(function(socket, next) {
+  if (!accessToken) {
+    next();
+    return;
+  }
+
+  if (getSocketAccessToken(socket) === accessToken) {
+    next();
+    return;
+  }
+
+  logWarn("拒绝未授权的 Socket.IO 连接:", socket.handshake && socket.handshake.address);
+  next(new Error("unauthorized"));
+});
 
 server.listen(listenPort, function() {
   console.log("Listening on port " + listenPort);
@@ -195,11 +354,57 @@ function makelayout(settings) {
     return l;
 }
 
+function zoneHasSelectedOutput(zone) {
+    return !!(settings.output && zone && zone.outputs && zone.outputs.some(function(output) {
+        return output.output_id === settings.output.output_id;
+    }));
+}
+
+function getActiveZone() {
+    if (!zoneStatus || zoneStatus.length === 0) {
+        return null;
+    }
+
+    if (settings.output) {
+        return zoneStatus.find(zoneHasSelectedOutput) || null;
+    }
+
+    return zoneStatus[0];
+}
+
+function emitPlaybackState(zone) {
+    if (!zone) {
+        io.emit("zoneStatus", []);
+        io.emit("notPlaying", { state: "unavailable" });
+        return;
+    }
+
+    if (settings.output) {
+        io.emit("zoneStatus", [zone]);
+    } else {
+        io.emit("zoneStatus", zoneStatus);
+    }
+
+    if (zone.state === "playing" && zone.now_playing) {
+        logDebug('播放信息:', {
+            image_key: zone.now_playing.image_key,
+            three_line: zone.now_playing.three_line,
+            state: zone.state
+        });
+        io.emit("nowplaying", {
+            ...zone.now_playing,
+            state: "playing"
+        });
+    } else {
+        io.emit("notPlaying", { state: zone.state || "unknown" });
+    }
+}
+
 // 创建 Roon API 实例
 var roon = new RoonApi({
     extension_id:        "com.epochaudio.coverart",
     display_name:        "CoverArt_docker",
-    display_version:     "5.0.1",
+    display_version:     "5.0.2",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
@@ -219,71 +424,44 @@ var roon = new RoonApi({
 
         // 订阅 zones 变化
         transport.subscribe_zones((cmd, data) => {
-            console.log('收到zones订阅响应:', cmd, data);
+            var hasPlaybackRelevantChange = false;
+
+            if (!isSeekOnlyZoneChange(data)) {
+                logDebug('收到zones订阅响应:', cmd, data);
+            }
             
             try {
                 if (cmd == "Subscribed") {
-                    // 初始化 zones
                     zoneStatus = data.zones || [];
-                    
-                    // 如果有保存的区域设置，只显示选中的区域
-                    if (settings.output) {
-                        const selectedZone = zoneStatus.find(z => 
-                            z.outputs.some(o => o.output_id === settings.output.output_id)
-                        );
-                        if (selectedZone) {
-                            io.emit("zoneStatus", [selectedZone]);
-                            return;
-                        }
-                    }
-                    
-                    io.emit("zoneStatus", zoneStatus);
+                    emitPlaybackState(getActiveZone());
                 } else if (cmd == "Changed") {
-                    // 处理 zones 变化
                     if (data.zones_removed) {
                         data.zones_removed.forEach(zone => {
                             zoneStatus = zoneStatus.filter(z => z.zone_id !== zone.zone_id);
                         });
+                        hasPlaybackRelevantChange = true;
                     }
                     if (data.zones_added) {
                         zoneStatus = [...zoneStatus, ...data.zones_added];
+                        hasPlaybackRelevantChange = true;
                     }
                     if (data.zones_changed) {
                         data.zones_changed.forEach(changed => {
                             const idx = zoneStatus.findIndex(z => z.zone_id === changed.zone_id);
                             if (idx !== -1) {
                                 zoneStatus[idx] = changed;
-                                
-                                // 如果是选中的区域，发送状态更新
-                            console.log("处理zone变更:", { zone_id: changed.zone_id, state: changed.state, has_settings_output: !!settings.output });
-                                if (settings.output && 
-                                    changed.outputs.some(o => o.output_id === settings.output.output_id)) {
-                                console.log("匹配到选中的输出设备，处理状态更新");
-                                    // 发送播放状态更新
-                                    if (changed.state === "playing" && changed.now_playing) {
-                                        console.log('播放信息:', {
-                                            image_key: changed.now_playing.image_key,
-                                            three_line: changed.now_playing.three_line,
-                                            state: changed.state,
-                                            raw: changed.now_playing
-                                        });
-                                        io.emit("nowplaying", {
-                                            ...changed.now_playing,  // 传递完整的 now_playing 信息
-                                            state: "playing"
-                                        });
-                                    } else if (changed.state !== "playing") {
-                                        console.log('非播放状态:', changed.state);
-                                        io.emit("notPlaying", { state: changed.state });
-                                    }
-                                    io.emit("zoneStatus", [changed]);
-                                }
+                                hasPlaybackRelevantChange = true;
+                                logDebug("处理zone变更:", {
+                                    zone_id: changed.zone_id,
+                                    state: changed.state,
+                                    has_settings_output: !!settings.output
+                                });
                             }
                         });
                     }
-                    
-                    // 如果没有选中的区域，发送所有区域状态
-                    if (!settings.output) {
-                        io.emit("zoneStatus", zoneStatus);
+
+                    if (hasPlaybackRelevantChange) {
+                        emitPlaybackState(getActiveZone());
                     }
                 }
             } catch (err) {
@@ -329,16 +507,9 @@ var svc_settings = new RoonApiSettings(roon, {
             roon.save_config("settings", settings);
             
             // 如果已配对，更新区域状态
-            if (pairStatus && settings.output) {
+            if (pairStatus) {
                 console.log('更新选中的区域:', settings.output);
-                const selectedZone = zoneStatus.find(z => 
-                    z.outputs.some(o => o.output_id === settings.output.output_id)
-                );
-                
-                if (selectedZone) {
-                    console.log('找到匹配的区域:', selectedZone.zone_id);
-                    io.emit("zoneStatus", [selectedZone]);
-                }
+                emitPlaybackState(getActiveZone());
             }
         }
     }
@@ -470,12 +641,14 @@ io.on("connection", function(socket) {
   
   // 如果已配对且有区域信息，发送区域状态
   if (pairStatus && zoneStatus.length > 0) {
-    socket.emit("zoneStatus", zoneStatus);
+    var activeZone = getActiveZone();
+    socket.emit("zoneStatus", settings.output && activeZone ? [activeZone] : zoneStatus);
   }
 
   socket.on("getZone", function() {
     if (pairStatus && zoneStatus.length > 0) {
-      socket.emit("zoneStatus", zoneStatus);
+      var activeZone = getActiveZone();
+      socket.emit("zoneStatus", settings.output && activeZone ? [activeZone] : zoneStatus);
     } else {
       console.log('Zones未就绪或为空');
       socket.emit("zoneStatus", []);

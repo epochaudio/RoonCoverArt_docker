@@ -1,12 +1,17 @@
-version: '3'
-
 services:
   coverart:
-    image: epochaudio/coverart_docker:latest
+    container_name: roon-coverart
+    build:
+      context: .
+    image: roon-coverart:5.0.2-local
     network_mode: "host"
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
-      # Optional fixed settings:
-      # - ./config/local.json:/app/config/local.json:ro
+      - ./config/local.json:/app/config/local.json:ro

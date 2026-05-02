@@ -1,12 +1,48 @@
 "use strict";
 
 // 全局变量和常量定义
-const socket = io({
+function getUrlParameter(name) {
+    const query = window.location.search ? window.location.search.substring(1).split('&') : [];
+    for (let i = 0; i < query.length; i++) {
+        const parts = query[i].split('=');
+        if (decodeURIComponent(parts[0] || '') === name) {
+            return decodeURIComponent((parts[1] || '').replace(/\+/g, ' '));
+        }
+    }
+    return '';
+}
+
+function getSocketAccessToken() {
+    const urlToken = getUrlParameter('token');
+    if (urlToken) {
+        try {
+            localStorage.setItem('coverartToken', urlToken);
+        } catch (error) {
+            console.warn('保存访问令牌失败:', error);
+        }
+        return urlToken;
+    }
+
+    try {
+        return localStorage.getItem('coverartToken') || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+const socketOptions = {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity
-});
+};
+const socketAccessToken = getSocketAccessToken();
+if (socketAccessToken) {
+    socketOptions.query = {
+        token: socketAccessToken
+    };
+}
+const socket = io(socketOptions);
 let currentImageKey = null;
 let mouseTimer;
 const imageCache = new Map();  // 图片缓存池
@@ -355,6 +391,17 @@ function isIOS() {
     || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 }
 
+function getThreeLineValue(nowPlaying, lineName) {
+    if (nowPlaying && nowPlaying.three_line && nowPlaying.three_line[lineName]) {
+        return nowPlaying.three_line[lineName];
+    }
+    return "";
+}
+
+function getAlbumName(nowPlaying) {
+    return getThreeLineValue(nowPlaying, "line3") || (nowPlaying && nowPlaying.album) || "";
+}
+
 // 显示模式切换
 function toggleDisplayMode(isPlaying) {
     const fullscreenContainer = document.querySelector('.playing-mode');
@@ -642,66 +689,195 @@ function setTheme(theme) {
 }
 
 // 键盘控制功能
+function emitZoneControl(eventName, label) {
+    if (!settings.zoneID) {
+        console.log('未选择区域，无法控制播放');
+        return false;
+    }
+
+    const zoneMsg = { zone_id: settings.zoneID };
+    console.log(label, '区域ID:', settings.zoneID);
+    socket.emit(eventName, zoneMsg);
+    return true;
+}
+
+function getGestureFeedbackLayer() {
+    return document.getElementById('gestureFeedback');
+}
+
+function removeFeedbackNode(node, delay) {
+    setTimeout(function() {
+        if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+        }
+    }, delay);
+}
+
+function showTouchRipple(x, y) {
+    var layer = getGestureFeedbackLayer();
+    if (!layer) return;
+
+    var ripple = document.createElement('div');
+    ripple.className = 'gesture-ripple';
+    ripple.style.left = x + 'px';
+    ripple.style.top = y + 'px';
+    layer.appendChild(ripple);
+    removeFeedbackNode(ripple, 620);
+}
+
+function getGestureIcon(action) {
+    if (action === 'next') return '›';
+    if (action === 'prev') return '‹';
+    if (action === 'stop') return '■';
+    if (action === 'play') return '▶';
+    return '';
+}
+
+function showGestureCue(action) {
+    var layer = getGestureFeedbackLayer();
+    if (!layer) return;
+
+    var flash = document.createElement('div');
+    flash.className = 'gesture-flash ' + action;
+    layer.appendChild(flash);
+    removeFeedbackNode(flash, 420);
+
+    var cue = document.createElement('div');
+    cue.className = 'gesture-cue ' + action;
+    cue.textContent = getGestureIcon(action);
+    layer.appendChild(cue);
+    removeFeedbackNode(cue, 820);
+}
+
+function confirmGestureAction(action) {
+    showGestureCue(action);
+    if (navigator.vibrate) {
+        navigator.vibrate(20);
+    }
+}
+
 function setupKeyboardControls() {
     document.addEventListener('keydown', function(event) {
-        // 确保有选中的区域才能控制
-        if (!settings.zoneID) {
-            console.log('未选择区域，无法控制播放');
-            return;
-        }
-        
-        const zoneMsg = { zone_id: settings.zoneID };
         console.log('键盘事件:', event.code, '区域ID:', settings.zoneID);
         
         switch(event.code) {
             case 'Space':
                 event.preventDefault();
-                console.log('播放/暂停切换');
-                socket.emit('goPlayPause', zoneMsg);
+                emitZoneControl('goPlayPause', '播放/暂停切换');
                 break;
             case 'ArrowLeft':
                 event.preventDefault();
-                console.log('上一曲');
-                socket.emit('goPrev', zoneMsg);
+                emitZoneControl('goPrev', '上一曲');
                 break;
             case 'ArrowRight':
                 event.preventDefault();
-                console.log('下一曲');
-                socket.emit('goNext', zoneMsg);
+                emitZoneControl('goNext', '下一曲');
                 break;
             case 'KeyP':
                 event.preventDefault();
-                console.log('播放');
-                socket.emit('goPlay', zoneMsg);
+                emitZoneControl('goPlay', '播放');
                 break;
             case 'Escape':
                 event.preventDefault();
-                console.log('停止');
-                socket.emit('goStop', zoneMsg);
+                emitZoneControl('goStop', '停止');
                 break;
             // 媒体键支持
             case 'MediaPlayPause':
                 event.preventDefault();
-                console.log('媒体键: 播放/暂停');
-                socket.emit('goPlayPause', zoneMsg);
+                emitZoneControl('goPlayPause', '媒体键: 播放/暂停');
                 break;
             case 'MediaTrackNext':
                 event.preventDefault();
-                console.log('媒体键: 下一曲');
-                socket.emit('goNext', zoneMsg);
+                emitZoneControl('goNext', '媒体键: 下一曲');
                 break;
             case 'MediaTrackPrevious':
                 event.preventDefault();
-                console.log('媒体键: 上一曲');
-                socket.emit('goPrev', zoneMsg);
+                emitZoneControl('goPrev', '媒体键: 上一曲');
                 break;
             case 'MediaStop':
                 event.preventDefault();
-                console.log('媒体键: 停止');
-                socket.emit('goStop', zoneMsg);
+                emitZoneControl('goStop', '媒体键: 停止');
                 break;
         }
     });
+}
+
+// 触摸手势控制
+function setupGestureControls() {
+    var gestureStart = null;
+    var minDistance = 60;
+    var maxDuration = 1200;
+    var directionRatio = 1.2;
+
+    document.addEventListener('touchstart', function(event) {
+        if (!event.touches || event.touches.length !== 1) {
+            gestureStart = null;
+            return;
+        }
+
+        var touch = event.touches[0];
+        gestureStart = {
+            x: touch.clientX,
+            y: touch.clientY,
+            time: Date.now()
+        };
+    }, false);
+
+    document.addEventListener('touchend', function(event) {
+        if (!gestureStart || !event.changedTouches || event.changedTouches.length !== 1) {
+            gestureStart = null;
+            return;
+        }
+
+        var touch = event.changedTouches[0];
+        var dx = touch.clientX - gestureStart.x;
+        var dy = touch.clientY - gestureStart.y;
+        var elapsed = Date.now() - gestureStart.time;
+        var absX = Math.abs(dx);
+        var absY = Math.abs(dy);
+        showTouchRipple(touch.clientX, touch.clientY);
+
+        var eventName = null;
+        var label = null;
+        var action = null;
+
+        gestureStart = null;
+
+        if (elapsed > maxDuration || Math.max(absX, absY) < minDistance) {
+            return;
+        }
+
+        if (absX > absY * directionRatio) {
+            if (dx < 0) {
+                eventName = 'goNext';
+                label = '左滑：下一曲';
+                action = 'next';
+            } else {
+                eventName = 'goPrev';
+                label = '右滑：上一曲';
+                action = 'prev';
+            }
+        } else if (absY > absX * directionRatio) {
+            if (dy < 0) {
+                eventName = 'goStop';
+                label = '上滑：停止';
+                action = 'stop';
+            } else {
+                eventName = 'goPlay';
+                label = '下滑：播放';
+                action = 'play';
+            }
+        }
+
+        if (eventName && emitZoneControl(eventName, label)) {
+            confirmGestureAction(action);
+            event.preventDefault();
+        }
+    }, false);
+
+    document.addEventListener('touchcancel', function() {
+        gestureStart = null;
+    }, false);
 }
 
 // Media Session API 支持
@@ -752,9 +928,9 @@ function setupMediaSession() {
 function updateMediaSessionMetadata(nowPlaying) {
     if ('mediaSession' in navigator && nowPlaying) {
         try {
-            const title = nowPlaying.three_line?.line1 || '未知曲目';
-            const artist = nowPlaying.three_line?.line2 || '未知艺术家';
-            const album = nowPlaying.three_line?.line3 || nowPlaying.album || '未知专辑';
+            const title = getThreeLineValue(nowPlaying, "line1") || '未知曲目';
+            const artist = getThreeLineValue(nowPlaying, "line2") || '未知艺术家';
+            const album = getAlbumName(nowPlaying) || '未知专辑';
             
             console.log('更新媒体会话元数据:', { title, artist, album });
             
@@ -781,6 +957,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 设置键盘和媒体控制
     setupKeyboardControls();
+    setupGestureControls();
     setupMediaSession();
     
     // 添加页面卸载时的清理
@@ -821,6 +998,44 @@ socket.on('connect_error', (error) => {
     console.error('Socket.IO 连接错误:', error);
 });
 
+function cancelPlaybackSwitchTimer() {
+    if (isPlaybackTimerActive) {
+        console.log('取消15秒切换定时器');
+        timerManager.clearTimer('playbackTimer');
+        isPlaybackTimerActive = false;
+    }
+}
+
+function schedulePlaybackSwitch(data) {
+    console.log('收到非播放状态事件:', data, '当前定时器状态:', isPlaybackTimerActive);
+    try {
+        if (!isPlaybackTimerActive) {
+            console.log('设置15秒切换定时器');
+            isPlaybackTimerActive = true;
+            timerManager.clearTimer('playbackTimer');
+            timerManager.setTimer('playbackTimer', async () => {
+                console.log('15秒已到，切换到网格显示');
+                try {
+                    toggleDisplayMode(false);
+                    // 确保网格正确初始化
+                    await initializeGridDisplay();
+                    console.log('网格显示初始化完成');
+                } catch (error) {
+                    console.error('切换到网格显示时出错:', error);
+                    // 尝试恢复
+                    attemptRecovery();
+                }
+                isPlaybackTimerActive = false;
+            }, 15000);
+        } else {
+            console.log('定时器已经在运行中，跳过设置');
+        }
+    } catch (error) {
+        console.error('处理非播放状态事件时出错:', error);
+        isPlaybackTimerActive = false;  // 发生错误时重置状态
+    }
+}
+
 // Socket.IO 事件处理
 socket.on('pairStatus', function(payload) {
     console.log('收到配对状态:', payload);
@@ -854,17 +1069,27 @@ socket.on('zoneStatus', function(payload) {
             } : '无播放信息'
         });
 
+        if (zone.state && zone.state !== 'playing') {
+            schedulePlaybackSwitch({ state: zone.state });
+            return;
+        }
+
+        if (zone.state === 'playing') {
+            cancelPlaybackSwitchTimer();
+            toggleDisplayMode(true);
+        }
+
         if (zone.now_playing && zone.now_playing.image_key !== currentImageKey) {
             const nowPlaying = zone.now_playing;
             console.log('更新图片key:', nowPlaying.image_key);
             currentImageKey = nowPlaying.image_key;
             
             // 获取专辑名称
-            const albumName = nowPlaying.three_line?.line3 || nowPlaying.album;
+            const albumName = getAlbumName(nowPlaying);
             
             console.log('专辑信息:', {
                 albumName,
-                来源: nowPlaying.three_line?.line3 ? 'three_line.line3' : 'album字段',
+                来源: getThreeLineValue(nowPlaying, "line3") ? 'three_line.line3' : 'album字段',
                 原始数据: {
                     three_line: nowPlaying.three_line,
                     album: nowPlaying.album
@@ -892,49 +1117,19 @@ socket.on('zoneStatus', function(payload) {
 });
 
 socket.on('notPlaying', function(data) {
-    console.log('收到非播放状态事件:', data, '当前定时器状态:', isPlaybackTimerActive);
-    try {
-        if (!isPlaybackTimerActive) {
-            console.log('设置15秒切换定时器');
-            isPlaybackTimerActive = true;
-            timerManager.clearTimer('playbackTimer');
-            timerManager.setTimer('playbackTimer', async () => {
-                console.log('15秒已到，切换到网格显示');
-                try {
-                    toggleDisplayMode(false);
-                    // 确保网格正确初始化
-                    await initializeGridDisplay();
-                    console.log('网格显示初始化完成');
-                } catch (error) {
-                    console.error('切换到网格显示时出错:', error);
-                    // 尝试恢复
-                    attemptRecovery();
-                }
-                isPlaybackTimerActive = false;
-            }, 15000);
-        } else {
-            console.log('定时器已经在运行中，跳过设置');
-        }
-    } catch (error) {
-        console.error('处理非播放状态事件时出错:', error);
-        isPlaybackTimerActive = false;  // 发生错误时重置状态
-    }
+    schedulePlaybackSwitch(data);
 });
 
 socket.on('nowplaying', function(data) {
     console.log('收到开始播放事件:', data);
     try {
-        if (isPlaybackTimerActive) {
-            console.log('取消5秒切换定时器');
-            timerManager.clearTimer('playbackTimer');
-            isPlaybackTimerActive = false;
-        }
+        cancelPlaybackSwitchTimer();
         if (data && data.image_key) {
             console.log('更新当前播放封面');
             currentImageKey = data.image_key;
             
             // 获取专辑名称
-            const albumName = data.three_line?.line3 || data.album;
+            const albumName = getAlbumName(data);
             
             if (albumName) {
                 updateImage(data.image_key, albumName);
@@ -1094,9 +1289,9 @@ function updateAndroidTrackInfo(nowPlaying) {
         const albumTextElement = document.getElementById("albumText");
         
         // 映射Roon数据到显示格式：曲目名称 → 艺术家 → 专辑名称
-        const trackText = nowPlaying?.three_line?.line1 || ""; // 曲目名称（第一行显示）- 来自Roon API的line1
-        const artistText = nowPlaying?.three_line?.line2 || ""; // 艺术家（第二行显示）- 来自Roon API的line2  
-        const albumText = nowPlaying?.three_line?.line3 || nowPlaying?.album || ""; // 专辑名称（第三行显示）- 来自Roon API的line3
+        const trackText = getThreeLineValue(nowPlaying, "line1"); // 曲目名称（第一行显示）- 来自Roon API的line1
+        const artistText = getThreeLineValue(nowPlaying, "line2"); // 艺术家（第二行显示）- 来自Roon API的line2
+        const albumText = getAlbumName(nowPlaying); // 专辑名称（第三行显示）- 来自Roon API的line3
         
         console.log("映射的曲目信息:", { trackText, artistText, albumText });
         

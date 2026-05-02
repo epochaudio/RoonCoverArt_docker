@@ -11,3 +11,4 @@ config.json
 # Local IDE/runtime files
 .claude/
 .DS_Store
+._*

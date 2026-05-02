@@ -114,7 +114,7 @@ class AppManager {
                     const nowPlaying = zone.now_playing;
                     this.currentImageKey = nowPlaying.image_key;
                     
-                    const albumName = nowPlaying.three_line?.line3 || nowPlaying.album;
+                    const albumName = getAlbumName(nowPlaying);
                     
                     this.eventEmitter.emit('imageUpdate', {
                         imageKey: this.currentImageKey,
@@ -132,7 +132,7 @@ class AppManager {
             localStorage.setItem('lastImageKey', data.image_key);
             this.currentImageKey = data.image_key;
             
-            const albumName = data.three_line?.line3 || data.album;
+            const albumName = getAlbumName(data);
             
             this.eventEmitter.emit('imageUpdate', {
                 imageKey: data.image_key,
@@ -184,7 +184,18 @@ class AppManager {
     }
 }
 
+function getThreeLineValue(data, lineName) {
+    if (data && data.three_line && data.three_line[lineName]) {
+        return data.three_line[lineName];
+    }
+    return "";
+}
+
+function getAlbumName(data) {
+    return getThreeLineValue(data, "line3") || (data && data.album) || "";
+}
+
 // 等待 DOM 加载完成后初始化应用
 document.addEventListener('DOMContentLoaded', () => {
     window.appManager = new AppManager();
-}); 
+});

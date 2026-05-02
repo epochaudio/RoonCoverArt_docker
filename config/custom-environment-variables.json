@@ -6,5 +6,12 @@
     "saveDir": "ARTWORK_SAVEDIR",
     "autoSave": "ARTWORK_AUTOSAVE",
     "format": "ARTWORK_FORMAT"
+  },
+  "access": {
+    "token": "ACCESS_TOKEN",
+    "allowedOrigins": "ACCESS_ALLOWED_ORIGINS"
+  },
+  "logging": {
+    "level": "LOG_LEVEL"
   }
 }

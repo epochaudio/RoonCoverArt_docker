@@ -1,6 +1,6 @@
 {
   "name": "CoverArt",
-  "version": "5.0.1",
+  "version": "5.0.2",
   "description": "CoverArt",
   "main": "app.js",
   "author": "门耳朵制作",
@@ -26,7 +26,7 @@
     "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
     "node-roon-api-status": "github:roonlabs/node-roon-api-status",
     "node-roon-api-transport": "github:roonlabs/node-roon-api-transport",
-    "socket.io": "^2.3.0"
+    "socket.io": "^4.8.3"
   },
   "repository": {
     "type": "git",

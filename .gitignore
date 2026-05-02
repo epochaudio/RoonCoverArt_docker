@@ -1,14 +1,18 @@
 node_modules/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Runtime image cache
-images/*
-!images/.gitkeep
+.env
+.env.*
+!.env.example
 
-# Roon pairing token/state (generated at runtime)
 config.json
+config/local.json
+images/
+SYSTEM_MAINTENANCE.md
+REVIEW_FIX_PLAN.md
 
-# Local IDE/runtime files
-.claude/
+*.log
 .DS_Store
 ._*

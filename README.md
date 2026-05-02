@@ -27,7 +27,7 @@ Compared with the square-frame version, this build focuses on:
 - Art Wall 每 60 秒刷新 3 张图片
 - 支持键盘、媒体键和带视觉反馈的触摸手势控制（左滑下一曲、右滑上一曲、上滑停止、下滑播放）
 - 自动保存播放过的专辑封面到 `images/`
-- Roon 配对 token 持久化（通过 `config.json`，避免重启后重复授权）
+- Roon 配对信息持久化（通过 `config.json`，避免重启后重复授权）
 
 ### Docker 镜像
 
@@ -45,10 +45,10 @@ printf '%s\n' '{}' > config.json
 
 说明：
 - `images/` 用于保存封面缓存（建议持久化）
-- `config.json` 用于保存 Roon 配对 token（建议持久化）
+- `config.json` 用于保存 Roon 配对信息（建议持久化，由 Roon 授权后写入）
 - `config/local.json` 是可选项，不创建也能启动（使用默认参数）
 
-2. 运行容器（默认参数 + token 持久化）
+2. 运行容器（默认参数 + 配对信息持久化）
 
 ```bash
 docker pull epochaudio/coverart_docker:latest
@@ -65,6 +65,7 @@ docker run -d \
 3. 打开页面
 
 - 默认地址：`http://localhost:3666`
+- 如果从局域网其他设备访问，请将 `localhost` 替换为宿主机 IP。
 
 ### Docker Compose（推荐）
 
@@ -85,7 +86,8 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
-      - ./config/local.json:/app/config/local.json:ro
+      # 可选：先创建 config/local.json，再取消下一行注释
+      # - ./config/local.json:/app/config/local.json:ro
 ```
 
 启动：
@@ -93,6 +95,8 @@ services:
 ```bash
 docker compose up -d
 ```
+
+打开页面：`http://localhost:3666`
 
 ### 可选：使用 `config/local.json` 固化参数
 
@@ -111,7 +115,6 @@ cat > config/local.json <<'EOF'
     "format": "jpg"
   },
   "access": {
-    "token": "",
     "allowedOrigins": []
   },
   "logging": {
@@ -130,7 +133,7 @@ Docker Run 增加挂载：
 Docker Compose 增加：
 
 ```yaml
-      - ./config/local.json:/app/config/local.json:ro
+      # - ./config/local.json:/app/config/local.json:ro
 ```
 
 ### 配置说明（建议写入 `config/local.json`）
@@ -139,7 +142,6 @@ Docker Compose 增加：
 - `artwork.saveDir`: 封面保存目录（默认 `./images`）
 - `artwork.autoSave`: 是否自动保存封面（默认 `true`）
 - `artwork.format`: 保存格式（`jpg` 或 `png`，默认 `jpg`）
-- `access.token`: 可选访问令牌；配置后 Socket.IO 连接需要通过 URL `?token=` 传入
 - `access.allowedOrigins`: 可选跨域来源白名单；环境变量中多个来源用逗号分隔
 - `logging.level`: 日志级别，支持 `error` / `warn` / `info` / `debug`，默认 `info`
 
@@ -148,13 +150,12 @@ Docker Compose 增加：
 - `ARTWORK_SAVEDIR`
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
-- `ACCESS_TOKEN`
 - `ACCESS_ALLOWED_ORIGINS`
 - `LOG_LEVEL`
 
 说明：
 - 固定参数建议放在 `config/local.json`
-- Roon 配对信息会写入根目录 `config.json`（请保留）
+- Roon 配对信息由 Roon 授权后写入根目录 `config.json`（请保留）
 
 ### Roon 设置步骤
 
@@ -168,6 +169,8 @@ Docker Compose 增加：
 
 - `config.json` 必须持久化挂载，否则容器重建/重启后可能需要重新授权
 - `images/` 需要可写权限，用于保存专辑封面
+- `network_mode: "host"` 用于 Roon 发现，也会让 `3666` 端口暴露在宿主机网络上
+- 不要把 `config.json`、`config/local.json`、`.env`、`images/` 提交到 GitHub
 
 ### 常用命令
 
@@ -196,7 +199,7 @@ docker build -t roon-coverart:5.0.2-local .
 - Art Wall refreshes 3 images every 60 seconds
 - Keyboard, media-key, and visual touch gesture controls (swipe left for next, right for previous, up to stop, down to play)
 - Auto-saves played album art to `images/`
-- Persistent Roon pairing token via `config.json` (avoids re-authorization after restart)
+- Persistent Roon pairing state via `config.json` (avoids re-authorization after restart)
 
 ### Docker Images
 
@@ -214,10 +217,10 @@ printf '%s\n' '{}' > config.json
 
 Notes:
 - `images/` stores cached/saved artwork (recommended to persist)
-- `config.json` stores the Roon pairing token (recommended to persist)
+- `config.json` stores Roon pairing state (recommended to persist, written after Roon authorization)
 - `config/local.json` is optional (defaults are used if missing)
 
-2. Run the container (default settings + persistent token)
+2. Run the container (default settings + persistent pairing state)
 
 ```bash
 docker pull epochaudio/coverart_docker:latest
@@ -234,6 +237,7 @@ docker run -d \
 3. Open the UI
 
 - Default URL: `http://localhost:3666`
+- For LAN access from another device, replace `localhost` with the host IP address.
 
 ### Docker Compose (Recommended)
 
@@ -254,7 +258,8 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
-      - ./config/local.json:/app/config/local.json:ro
+      # Optional: create config/local.json first, then uncomment this mount.
+      # - ./config/local.json:/app/config/local.json:ro
 ```
 
 Start:
@@ -262,6 +267,8 @@ Start:
 ```bash
 docker compose up -d
 ```
+
+Open the UI: `http://localhost:3666`
 
 ### Optional: Persist fixed settings in `config/local.json`
 
@@ -280,7 +287,6 @@ cat > config/local.json <<'EOF'
     "format": "jpg"
   },
   "access": {
-    "token": "",
     "allowedOrigins": []
   },
   "logging": {
@@ -299,7 +305,7 @@ Add this mount to Docker Run:
 Add this line to Docker Compose:
 
 ```yaml
-      - ./config/local.json:/app/config/local.json:ro
+      # - ./config/local.json:/app/config/local.json:ro
 ```
 
 ### Configuration (Recommended in `config/local.json`)
@@ -308,7 +314,6 @@ Add this line to Docker Compose:
 - `artwork.saveDir`: Artwork save directory (default `./images`)
 - `artwork.autoSave`: Enable auto-save (default `true`)
 - `artwork.format`: Save format (`jpg` or `png`, default `jpg`)
-- `access.token`: Optional access token; if set, pass it as URL `?token=` for Socket.IO access
 - `access.allowedOrigins`: Optional CORS origin allowlist; comma-separated when set by env var
 - `logging.level`: Log level, one of `error` / `warn` / `info` / `debug`, default `info`
 
@@ -317,13 +322,12 @@ Environment variables are also supported:
 - `ARTWORK_SAVEDIR`
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
-- `ACCESS_TOKEN`
 - `ACCESS_ALLOWED_ORIGINS`
 - `LOG_LEVEL`
 
 Notes:
 - Put stable parameters in `config/local.json`
-- Keep root `config.json` for Roon pairing token/state persistence
+- Keep root `config.json` for Roon pairing state written after Roon authorization
 
 ### Roon Setup
 
@@ -337,6 +341,8 @@ Notes:
 
 - Persist `config.json`, or you may need to re-authorize after container recreation/restart
 - `images/` must be writable so artwork can be saved
+- `network_mode: "host"` is used for Roon discovery and exposes port `3666` on the host network
+- Do not commit `config.json`, `config/local.json`, `.env`, or `images/` to GitHub
 
 ### Useful Commands
 

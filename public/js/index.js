@@ -1,47 +1,12 @@
 "use strict";
 
 // 全局变量和常量定义
-function getUrlParameter(name) {
-    const query = window.location.search ? window.location.search.substring(1).split('&') : [];
-    for (let i = 0; i < query.length; i++) {
-        const parts = query[i].split('=');
-        if (decodeURIComponent(parts[0] || '') === name) {
-            return decodeURIComponent((parts[1] || '').replace(/\+/g, ' '));
-        }
-    }
-    return '';
-}
-
-function getSocketAccessToken() {
-    const urlToken = getUrlParameter('token');
-    if (urlToken) {
-        try {
-            localStorage.setItem('coverartToken', urlToken);
-        } catch (error) {
-            console.warn('保存访问令牌失败:', error);
-        }
-        return urlToken;
-    }
-
-    try {
-        return localStorage.getItem('coverartToken') || '';
-    } catch (error) {
-        return '';
-    }
-}
-
 const socketOptions = {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity
 };
-const socketAccessToken = getSocketAccessToken();
-if (socketAccessToken) {
-    socketOptions.query = {
-        token: socketAccessToken
-    };
-}
 const socket = io(socketOptions);
 let currentImageKey = null;
 let mouseTimer;

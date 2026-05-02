@@ -8,7 +8,6 @@
     "format": "ARTWORK_FORMAT"
   },
   "access": {
-    "token": "ACCESS_TOKEN",
     "allowedOrigins": "ACCESS_ALLOWED_ORIGINS"
   },
   "logging": {

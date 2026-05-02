@@ -14,4 +14,5 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
-      - ./config/local.json:/app/config/local.json:ro
+      # Optional: create config/local.json first, then uncomment this mount.
+      # - ./config/local.json:/app/config/local.json:ro

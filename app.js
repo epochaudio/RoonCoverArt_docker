@@ -155,7 +155,6 @@ function getRoonImageFormatMime() {
 }
 
 var configPort = getNumericConfig("server.port", defaultListenPort);
-var accessToken = getStringConfig("access.token", "");
 var allowedOrigins = getListConfig("access.allowedOrigins", []);
 var configuredLogLevel = getStringConfig("logging.level", "info").toLowerCase();
 var logLevels = {
@@ -251,7 +250,7 @@ app.use(function(req, res, next) {
     }
     res.header(
       "Access-Control-Allow-Headers",
-      "Origin, X-Requested-With, Content-Type, Accept, X-CoverArt-Token, Authorization"
+      "Origin, X-Requested-With, Content-Type, Accept"
     );
     res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   } else {
@@ -281,44 +280,15 @@ app.use('/images', express.static('images'));
 var server = http.createServer(app);
 var SocketIOServer = require("socket.io").Server;
 var io = new SocketIOServer(server, {
-  cors: {
-    origin: true,
-    methods: ["GET", "POST"],
-    allowedHeaders: ["X-CoverArt-Token", "Authorization", "Content-Type"]
-  },
+	  cors: {
+	    origin: true,
+	    methods: ["GET", "POST"],
+	    allowedHeaders: ["Content-Type"]
+	  },
   allowRequest: function(req, callback) {
     callback(null, isRequestOriginAllowed(req));
   }
-});
-
-function getSocketAccessToken(socket) {
-  var handshake = socket.handshake || {};
-  var query = handshake.query || {};
-  var headers = handshake.headers || {};
-  var token = query.token || headers["x-coverart-token"] || "";
-  var authHeader = headers.authorization || "";
-
-  if (!token && authHeader.indexOf("Bearer ") === 0) {
-    token = authHeader.slice(7);
-  }
-
-  return String(token || "").trim();
-}
-
-io.use(function(socket, next) {
-  if (!accessToken) {
-    next();
-    return;
-  }
-
-  if (getSocketAccessToken(socket) === accessToken) {
-    next();
-    return;
-  }
-
-  logWarn("拒绝未授权的 Socket.IO 连接:", socket.handshake && socket.handshake.address);
-  next(new Error("unauthorized"));
-});
+	});
 
 server.listen(listenPort, function() {
   console.log("Listening on port " + listenPort);

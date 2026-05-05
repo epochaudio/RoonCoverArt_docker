@@ -8,12 +8,14 @@ services:
     restart: unless-stopped
     environment:
       - INPUT_GID=${INPUT_GID:-}
-      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-false}
+      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-true}
       - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
       - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
       - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
     devices:
       - /dev/input:/dev/input
+    device_cgroup_rules:
+      - "c 13:* rwm"
     group_add:
       - "${INPUT_GID:-0}"
     logging:

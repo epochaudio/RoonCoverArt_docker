@@ -12,6 +12,13 @@
   "access": {
     "allowedOrigins": []
   },
+  "keyboard": {
+    "enabled": false,
+    "device": "",
+    "devices": [],
+    "debounceMs": 180,
+    "keyMap": {}
+  },
   "logging": {
     "level": "info"
   }

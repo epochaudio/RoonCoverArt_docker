@@ -26,12 +26,13 @@ Compared with the square-frame version, this build focuses on:
 - 播放停止后约 15 秒自动切换到 Art Wall 模式
 - Art Wall 每 60 秒刷新 3 张图片
 - 支持键盘、媒体键和带视觉反馈的触摸手势控制（左滑下一曲、右滑上一曲、上滑停止、下滑播放）
+- 支持 Docker 后端直接监听宿主机 `/dev/input` 键盘事件来控制 Roon（无需浏览器）
 - 自动保存播放过的专辑封面到 `images/`
 - Roon 配对信息持久化（通过 `config.json`，避免重启后重复授权）
 
 ### Docker 镜像
 
-- `epochaudio/coverart_docker:5.0.2`
+- `epochaudio/coverart_docker:5.0.3`
 - `epochaudio/coverart_docker:latest`
 
 ### 快速安装（Docker Run）
@@ -74,10 +75,20 @@ services:
   coverart:
     build:
       context: .
-    image: roon-coverart:5.0.2-local
+    image: roon-coverart:5.0.3-local
     container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
+    environment:
+      - INPUT_GID=${INPUT_GID:-}
+      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-false}
+      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
+      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
+      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+    devices:
+      - /dev/input:/dev/input
+    group_add:
+      - "${INPUT_GID:-0}"
     logging:
       driver: "json-file"
       options:
@@ -86,6 +97,8 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
+      - /dev/input/by-id:/dev/input/by-id:ro
+      - /dev/input/by-path:/dev/input/by-path:ro
       # 可选：先创建 config/local.json，再取消下一行注释
       # - ./config/local.json:/app/config/local.json:ro
 ```
@@ -116,6 +129,13 @@ cat > config/local.json <<'EOF'
   },
   "access": {
     "allowedOrigins": []
+  },
+  "keyboard": {
+    "enabled": false,
+    "device": "",
+    "devices": [],
+    "debounceMs": 180,
+    "keyMap": {}
   },
   "logging": {
     "level": "info"
@@ -151,11 +171,60 @@ Docker Compose 增加：
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
 - `ACCESS_ALLOWED_ORIGINS`
+- `KEYBOARD_ENABLED`
+- `KEYBOARD_DEVICE`
+- `KEYBOARD_DEVICES`
+- `KEYBOARD_DEBOUNCE_MS`
 - `LOG_LEVEL`
 
 说明：
 - 固定参数建议放在 `config/local.json`
 - Roon 配对信息由 Roon 授权后写入根目录 `config.json`（请保留）
+
+### 可选：启用宿主机键盘控制
+
+如果键盘插在运行 Docker 的宿主机上，可以让容器直接读取 `/dev/input` 事件并控制 Roon。默认关闭，需要显式启用。
+
+1. 查宿主机 `input` 组 GID：
+
+```bash
+getent group input
+```
+
+例如输出 `input:x:106:`，则创建 `.env`：
+
+```env
+INPUT_GID=106
+KEYBOARD_ENABLED=true
+KEYBOARD_DEVICE=
+KEYBOARD_DEVICES=
+KEYBOARD_DEBOUNCE_MS=180
+```
+
+默认不指定 `KEYBOARD_DEVICE` / `KEYBOARD_DEVICES`，程序会自动扫描并监听所有可识别的键盘事件设备，包括 `/dev/input/by-id/`、`/dev/input/by-path/` 和 `/proc/bus/input/devices` 中的键盘。也可以显式指定一个或多个稳定路径：
+
+```env
+KEYBOARD_DEVICE=/dev/input/by-id/your-keyboard-event-kbd
+KEYBOARD_DEVICES=/dev/input/by-id/kbd1-event-kbd,/dev/input/by-id/kbd2-event-kbd
+```
+
+优先使用 `/dev/input/by-id/...-event-kbd` 或 `/dev/input/by-path/...-event-kbd`，不要优先使用 `/dev/input/event3` 这类编号，因为重启后编号可能变化。可用下面命令查看：
+
+```bash
+ls -l /dev/input/by-id/
+ls -l /dev/input/by-path/
+```
+
+默认按键映射：
+
+- `KEY_RIGHT` / `KEY_NEXTSONG`: 下一曲
+- `KEY_LEFT` / `KEY_PREVIOUSSONG`: 上一曲
+- `KEY_SPACE` / `KEY_PLAYPAUSE`: 播放/暂停
+- `KEY_UP` / `KEY_PLAY`: 播放
+- `KEY_DOWN` / `KEY_STOP` / `KEY_STOPCD`: 停止
+- `KEY_PAUSE`: 暂停
+
+如果没有发现键盘，或某个设备打开失败，只会输出 warning，不影响网页和 Roon 扩展启动。
 
 ### Roon 设置步骤
 
@@ -183,7 +252,7 @@ docker ps -a --filter name=roon-coverart
 ### 源码构建（可选）
 
 ```bash
-docker build -t roon-coverart:5.0.2-local .
+docker build -t roon-coverart:5.0.3-local .
 ```
 
 ---
@@ -198,12 +267,13 @@ docker build -t roon-coverart:5.0.2-local .
 - Automatically switches to Art Wall mode about 15s after playback stops
 - Art Wall refreshes 3 images every 60 seconds
 - Keyboard, media-key, and visual touch gesture controls (swipe left for next, right for previous, up to stop, down to play)
+- Optional Docker-side host keyboard control via `/dev/input` (no browser required)
 - Auto-saves played album art to `images/`
 - Persistent Roon pairing state via `config.json` (avoids re-authorization after restart)
 
 ### Docker Images
 
-- `epochaudio/coverart_docker:5.0.2`
+- `epochaudio/coverart_docker:5.0.3`
 - `epochaudio/coverart_docker:latest`
 
 ### Quick Start (Docker Run)
@@ -246,10 +316,20 @@ services:
   coverart:
     build:
       context: .
-    image: roon-coverart:5.0.2-local
+    image: roon-coverart:5.0.3-local
     container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
+    environment:
+      - INPUT_GID=${INPUT_GID:-}
+      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-false}
+      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
+      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
+      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+    devices:
+      - /dev/input:/dev/input
+    group_add:
+      - "${INPUT_GID:-0}"
     logging:
       driver: "json-file"
       options:
@@ -258,6 +338,8 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
+      - /dev/input/by-id:/dev/input/by-id:ro
+      - /dev/input/by-path:/dev/input/by-path:ro
       # Optional: create config/local.json first, then uncomment this mount.
       # - ./config/local.json:/app/config/local.json:ro
 ```
@@ -288,6 +370,13 @@ cat > config/local.json <<'EOF'
   },
   "access": {
     "allowedOrigins": []
+  },
+  "keyboard": {
+    "enabled": false,
+    "device": "",
+    "devices": [],
+    "debounceMs": 180,
+    "keyMap": {}
   },
   "logging": {
     "level": "info"
@@ -323,11 +412,60 @@ Environment variables are also supported:
 - `ARTWORK_AUTOSAVE`
 - `ARTWORK_FORMAT`
 - `ACCESS_ALLOWED_ORIGINS`
+- `KEYBOARD_ENABLED`
+- `KEYBOARD_DEVICE`
+- `KEYBOARD_DEVICES`
+- `KEYBOARD_DEBOUNCE_MS`
 - `LOG_LEVEL`
 
 Notes:
 - Put stable parameters in `config/local.json`
 - Keep root `config.json` for Roon pairing state written after Roon authorization
+
+### Optional: Host Keyboard Control
+
+If the keyboard is attached to the Docker host, the container can read `/dev/input` events and control Roon directly. This is disabled by default.
+
+1. Find the host `input` group GID:
+
+```bash
+getent group input
+```
+
+If the output is `input:x:106:`, create `.env` like this:
+
+```env
+INPUT_GID=106
+KEYBOARD_ENABLED=true
+KEYBOARD_DEVICE=
+KEYBOARD_DEVICES=
+KEYBOARD_DEBOUNCE_MS=180
+```
+
+By default, leave `KEYBOARD_DEVICE` / `KEYBOARD_DEVICES` empty. The app scans and listens to all detected keyboard event devices from `/dev/input/by-id/`, `/dev/input/by-path/`, and `/proc/bus/input/devices`. You can also pin one or more stable paths:
+
+```env
+KEYBOARD_DEVICE=/dev/input/by-id/your-keyboard-event-kbd
+KEYBOARD_DEVICES=/dev/input/by-id/kbd1-event-kbd,/dev/input/by-id/kbd2-event-kbd
+```
+
+Prefer `/dev/input/by-id/...-event-kbd` or `/dev/input/by-path/...-event-kbd` over `/dev/input/event3`, because event numbers can change after reboot:
+
+```bash
+ls -l /dev/input/by-id/
+ls -l /dev/input/by-path/
+```
+
+Default key mapping:
+
+- `KEY_RIGHT` / `KEY_NEXTSONG`: next
+- `KEY_LEFT` / `KEY_PREVIOUSSONG`: previous
+- `KEY_SPACE` / `KEY_PLAYPAUSE`: play/pause
+- `KEY_UP` / `KEY_PLAY`: play
+- `KEY_DOWN` / `KEY_STOP` / `KEY_STOPCD`: stop
+- `KEY_PAUSE`: pause
+
+If no keyboard is detected, or one device fails to open, the app only logs a warning and does not stop the web UI or Roon extension.
 
 ### Roon Setup
 
@@ -355,7 +493,7 @@ docker ps -a --filter name=roon-coverart
 ### Build From Source (Optional)
 
 ```bash
-docker build -t roon-coverart:5.0.2-local .
+docker build -t roon-coverart:5.0.3-local .
 ```
 
 ## License

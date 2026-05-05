@@ -44,8 +44,56 @@ fix_permissions "/app/images" "目录"
 # 修复 config.json 文件权限
 fix_permissions "/app/config.json" "文件"
 
+RUN_AS_USER="node"
+
+keyboard_enabled() {
+    case "$KEYBOARD_ENABLED" in
+        true|TRUE|1|yes|YES|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+setup_input_group() {
+    if ! keyboard_enabled; then
+        return
+    fi
+
+    if [ -z "$INPUT_GID" ]; then
+        echo "警告: KEYBOARD_ENABLED=true 但未设置 INPUT_GID，node 用户可能无法读取 /dev/input"
+        return
+    fi
+
+    case "$INPUT_GID" in
+        *[!0-9]*)
+            echo "警告: INPUT_GID 不是数字: $INPUT_GID"
+            return
+            ;;
+    esac
+
+    input_group_name=$(awk -F: -v gid="$INPUT_GID" '$3 == gid { print $1; exit }' /etc/group)
+    if [ -z "$input_group_name" ]; then
+        input_group_name="hostinput"
+        addgroup -g "$INPUT_GID" "$input_group_name" 2>/dev/null || true
+    fi
+
+    input_group_name=$(awk -F: -v gid="$INPUT_GID" '$3 == gid { print $1; exit }' /etc/group)
+    if [ -n "$input_group_name" ]; then
+        addgroup node "$input_group_name" 2>/dev/null || true
+        RUN_AS_USER="node:$input_group_name"
+        echo "宿主机键盘输入组已配置: $input_group_name($INPUT_GID)"
+    else
+        echo "警告: 无法配置 INPUT_GID=$INPUT_GID 对应的输入组"
+    fi
+}
+
+setup_input_group
+
 echo "权限检查完成！"
 
 # 切换到 node 用户并执行原始命令
-echo "以 node 用户身份启动应用..."
-exec su-exec node "$@"
+echo "以 $RUN_AS_USER 身份启动应用..."
+exec su-exec "$RUN_AS_USER" "$@"

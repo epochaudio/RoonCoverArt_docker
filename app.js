@@ -65,6 +65,9 @@ var {
   saveArtwork,
   getImageStats
 } = require("./utils/imageUtils");
+var {
+  startKeyboardInput
+} = require("./utils/keyboardInput");
 
 function getBooleanConfig(path, fallbackValue) {
   if (!config.has(path)) {
@@ -132,6 +135,19 @@ function getListConfig(path, fallbackValue) {
     return value.split(",").map(function(item) {
       return item.trim();
     }).filter(Boolean);
+  }
+
+  return fallbackValue;
+}
+
+function getObjectConfig(path, fallbackValue) {
+  if (!config.has(path)) {
+    return fallbackValue;
+  }
+
+  var value = config.get(path);
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
   }
 
   return fallbackValue;
@@ -374,7 +390,7 @@ function emitPlaybackState(zone) {
 var roon = new RoonApi({
     extension_id:        "com.epochaudio.coverart",
     display_name:        "CoverArt_docker",
-    display_version:     "5.0.2",
+    display_version:     "5.0.3",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
@@ -589,6 +605,123 @@ function isBrowseServiceReady() {
   return !!(core && core.services && core.services.RoonApiBrowse);
 }
 
+var transportControlMap = {
+  previous: "previous",
+  next: "next",
+  playpause: "playpause",
+  play: "play",
+  pause: "pause",
+  stop: "stop"
+};
+
+function getZoneIdFromMessage(msg) {
+  if (typeof msg === "string") {
+    return msg;
+  }
+
+  if (msg && typeof msg === "object" && msg.zone_id) {
+    return msg.zone_id;
+  }
+
+  return null;
+}
+
+function getDefaultControlZoneId() {
+  var activeZone = getActiveZone();
+  return activeZone ? activeZone.zone_id : null;
+}
+
+function runRoonControl(action, zoneId, callback) {
+  var command = transportControlMap[action];
+
+  if (!command) {
+    var invalidActionError = new Error("不支持的控制命令: " + action);
+    if (callback) {
+      callback(invalidActionError);
+    }
+    return false;
+  }
+
+  if (!transport) {
+    var transportError = new Error("未连接到 Roon Core");
+    if (callback) {
+      callback(transportError);
+    }
+    return false;
+  }
+
+  var targetZoneId = zoneId || getDefaultControlZoneId();
+  if (!targetZoneId) {
+    var zoneError = new Error("没有可控制的播放区域");
+    if (callback) {
+      callback(zoneError);
+    }
+    return false;
+  }
+
+  try {
+    transport.control({ zone_id: targetZoneId }, command, function(error) {
+      if (error) {
+        logWarn("Roon控制命令执行失败:", action, targetZoneId, error);
+      } else {
+        logDebug("Roon控制命令已发送:", action, targetZoneId);
+      }
+
+      if (callback) {
+        callback(error || null);
+      }
+    });
+  } catch (err) {
+    if (callback) {
+      callback(err);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+function getKeyboardSettings() {
+  return {
+    enabled: getBooleanConfig("keyboard.enabled", false),
+    device: getStringConfig("keyboard.device", ""),
+    devices: getListConfig("keyboard.devices", []),
+    debounceMs: getNumericConfig("keyboard.debounceMs", 180),
+    keyMap: getObjectConfig("keyboard.keyMap", {})
+  };
+}
+
+function startKeyboardControls() {
+  var keyboardSettings = getKeyboardSettings();
+
+  if (!keyboardSettings.enabled) {
+    logInfo("宿主机键盘监听未启用");
+    return null;
+  }
+
+  return startKeyboardInput({
+    device: keyboardSettings.device,
+    devices: keyboardSettings.devices,
+    debounceMs: keyboardSettings.debounceMs,
+    keyMap: keyboardSettings.keyMap,
+    logger: {
+      debug: logDebug,
+      info: logInfo,
+      warn: logWarn
+    },
+    onAction: function(event) {
+      logInfo("收到宿主机键盘控制:", event.keyName, "->", event.action);
+      runRoonControl(event.action, null, function(error) {
+        if (error) {
+          logWarn("宿主机键盘控制失败:", error.message);
+        }
+      });
+    }
+  });
+}
+
+startKeyboardControls();
+
 // ---------------------------- WEB SOCKET --------------
 io.on("connection", function(socket) {
   function runTransportAction(actionName, fn) {
@@ -604,6 +737,16 @@ io.on("connection", function(socket) {
       console.error("执行Socket操作失败:", actionName, err);
       socket.emit("serverError", { error: "执行操作失败" });
     }
+  }
+
+  function runSocketControl(actionName, controlAction, msg) {
+    runTransportAction(actionName, function() {
+      runRoonControl(controlAction, getZoneIdFromMessage(msg), function(error) {
+        if (error) {
+          socket.emit("serverError", { error: error.message || "执行操作失败" });
+        }
+      });
+    });
   }
 
   // 发送当前配对状态
@@ -668,39 +811,27 @@ io.on("connection", function(socket) {
   });
 
   socket.on("goPrev", function(msg) {
-    runTransportAction("goPrev", function() {
-      transport.control(msg, "previous");
-    });
+    runSocketControl("goPrev", "previous", msg);
   });
 
   socket.on("goNext", function(msg) {
-    runTransportAction("goNext", function() {
-      transport.control(msg, "next");
-    });
+    runSocketControl("goNext", "next", msg);
   });
 
   socket.on("goPlayPause", function(msg) {
-    runTransportAction("goPlayPause", function() {
-      transport.control(msg, "playpause");
-    });
+    runSocketControl("goPlayPause", "playpause", msg);
   });
 
   socket.on("goPlay", function(msg) {
-    runTransportAction("goPlay", function() {
-      transport.control(msg, "play");
-    });
+    runSocketControl("goPlay", "play", msg);
   });
 
   socket.on("goPause", function(msg) {
-    runTransportAction("goPause", function() {
-      transport.control(msg, "pause");
-    });
+    runSocketControl("goPause", "pause", msg);
   });
 
   socket.on("goStop", function(msg) {
-    runTransportAction("goStop", function() {
-      transport.control(msg, "stop");
-    });
+    runSocketControl("goStop", "stop", msg);
   });
 });
 

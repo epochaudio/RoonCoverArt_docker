@@ -10,6 +10,12 @@
   "access": {
     "allowedOrigins": "ACCESS_ALLOWED_ORIGINS"
   },
+  "keyboard": {
+    "enabled": "KEYBOARD_ENABLED",
+    "device": "KEYBOARD_DEVICE",
+    "devices": "KEYBOARD_DEVICES",
+    "debounceMs": "KEYBOARD_DEBOUNCE_MS"
+  },
   "logging": {
     "level": "LOG_LEVEL"
   }

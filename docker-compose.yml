@@ -3,9 +3,19 @@ services:
     container_name: roon-coverart
     build:
       context: .
-    image: roon-coverart:5.0.2-local
+    image: roon-coverart:5.0.3-local
     network_mode: "host"
     restart: unless-stopped
+    environment:
+      - INPUT_GID=${INPUT_GID:-}
+      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-false}
+      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
+      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
+      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+    devices:
+      - /dev/input:/dev/input
+    group_add:
+      - "${INPUT_GID:-0}"
     logging:
       driver: "json-file"
       options:
@@ -14,5 +24,7 @@ services:
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
+      - /dev/input/by-id:/dev/input/by-id:ro
+      - /dev/input/by-path:/dev/input/by-path:ro
       # Optional: create config/local.json first, then uncomment this mount.
       # - ./config/local.json:/app/config/local.json:ro

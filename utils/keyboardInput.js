@@ -11,6 +11,9 @@ var KEY_VALUE_REPEAT = 2;
 var KEY_NAMES = {
   28: "KEY_ENTER",
   57: "KEY_SPACE",
+  113: "KEY_MUTE",
+  114: "KEY_VOLUMEDOWN",
+  115: "KEY_VOLUMEUP",
   103: "KEY_UP",
   105: "KEY_LEFT",
   106: "KEY_RIGHT",
@@ -35,6 +38,9 @@ var DEFAULT_KEY_MAP = {
   KEY_PAUSE: "pause",
   KEY_STOP: "stop",
   KEY_STOPCD: "stop",
+  KEY_VOLUMEUP: "volumeup",
+  KEY_VOLUMEDOWN: "volumedown",
+  KEY_MUTE: "mute",
   KEY_UP: "play",
   KEY_DOWN: "stop"
 };
@@ -45,7 +51,10 @@ var VALID_ACTIONS = {
   playpause: true,
   play: true,
   pause: true,
-  stop: true
+  stop: true,
+  volumeup: true,
+  volumedown: true,
+  mute: true
 };
 
 function getEventLayout() {

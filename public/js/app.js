@@ -111,7 +111,7 @@ const app = {
     DisplayManager,
     utils,
     config: {
-        version: '5.0.3'
+        version: '5.0.4'
     }
 };
 

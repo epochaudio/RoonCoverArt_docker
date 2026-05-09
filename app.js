@@ -390,7 +390,7 @@ function emitPlaybackState(zone) {
 var roon = new RoonApi({
     extension_id:        "com.epochaudio.coverart",
     display_name:        "CoverArt_docker",
-    display_version:     "5.0.3",
+    display_version:     "5.0.4",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
@@ -614,6 +614,11 @@ var transportControlMap = {
   stop: "stop"
 };
 
+var volumeControlMap = {
+  volumeup: 1,
+  volumedown: -1
+};
+
 function getZoneIdFromMessage(msg) {
   if (typeof msg === "string") {
     return msg;
@@ -629,6 +634,33 @@ function getZoneIdFromMessage(msg) {
 function getDefaultControlZoneId() {
   var activeZone = getActiveZone();
   return activeZone ? activeZone.zone_id : null;
+}
+
+function getDefaultControlOutput() {
+  var activeZone = getActiveZone();
+  var outputs = activeZone && Array.isArray(activeZone.outputs) ? activeZone.outputs : [];
+
+  if (settings.output && settings.output.output_id) {
+    var selectedOutput = outputs.find(function(output) {
+      return output && output.output_id === settings.output.output_id;
+    });
+
+    if (selectedOutput) {
+      return selectedOutput;
+    }
+
+    if (outputs.length === 0) {
+      return settings.output;
+    }
+  }
+
+  return outputs.find(function(output) {
+    return output && output.output_id && output.volume;
+  }) || outputs[0] || null;
+}
+
+function isKeyboardVolumeAction(action) {
+  return action === "volumeup" || action === "volumedown" || action === "mute";
 }
 
 function runRoonControl(action, zoneId, callback) {
@@ -681,12 +713,93 @@ function runRoonControl(action, zoneId, callback) {
   return true;
 }
 
+function runRoonVolumeControl(action, callback) {
+  var direction = volumeControlMap[action];
+
+  if (action !== "mute" && !direction) {
+    var invalidActionError = new Error("不支持的音量命令: " + action);
+    if (callback) {
+      callback(invalidActionError);
+    }
+    return false;
+  }
+
+  if (!transport) {
+    var transportError = new Error("未连接到 Roon Core");
+    if (callback) {
+      callback(transportError);
+    }
+    return false;
+  }
+
+  var output = getDefaultControlOutput();
+  if (!output || !output.output_id) {
+    var outputError = new Error("没有可控制音量的输出设备");
+    if (callback) {
+      callback(outputError);
+    }
+    return false;
+  }
+
+  try {
+    if (action === "mute") {
+      if (typeof transport.mute !== "function") {
+        var muteUnsupportedError = new Error("当前 Roon Transport 不支持静音控制");
+        if (callback) {
+          callback(muteUnsupportedError);
+        }
+        return false;
+      }
+
+      var muteMode = output.volume && output.volume.is_muted ? "unmute" : "mute";
+      transport.mute(output, muteMode, function(error) {
+        if (error) {
+          logWarn("Roon静音命令执行失败:", output.output_id, error);
+        } else {
+          logDebug("Roon静音命令已发送:", output.output_id, muteMode);
+        }
+
+        if (callback) {
+          callback(error || null);
+        }
+      });
+      return true;
+    }
+
+    var volumeSettings = output.volume || {};
+    var isIncrementalVolume = volumeSettings.type === "incremental";
+    var volumeStep = getKeyboardSettings().volumeStep;
+    var how = isIncrementalVolume ? "relative" : "relative_step";
+    var value = isIncrementalVolume ? direction : direction * volumeStep;
+
+    transport.change_volume(output, how, value, function(error) {
+      if (error) {
+        logWarn("Roon音量命令执行失败:", action, output.output_id, error);
+      } else {
+        logDebug("Roon音量命令已发送:", action, output.output_id, how, value);
+      }
+
+      if (callback) {
+        callback(error || null);
+      }
+    });
+  } catch (err) {
+    if (callback) {
+      callback(err);
+    }
+    return false;
+  }
+
+  return true;
+}
+
 function getKeyboardSettings() {
   return {
     enabled: getBooleanConfig("keyboard.enabled", false),
     device: getStringConfig("keyboard.device", ""),
     devices: getListConfig("keyboard.devices", []),
     debounceMs: getNumericConfig("keyboard.debounceMs", 180),
+    volumeStep: getNumericConfig("keyboard.volumeStep", 5),
     keyMap: getObjectConfig("keyboard.keyMap", {})
   };
 }
@@ -711,11 +824,17 @@ function startKeyboardControls() {
     },
     onAction: function(event) {
       logInfo("收到宿主机键盘控制:", event.keyName, "->", event.action);
-      runRoonControl(event.action, null, function(error) {
+      var onControlComplete = function(error) {
         if (error) {
           logWarn("宿主机键盘控制失败:", error.message);
         }
-      });
+      };
+
+      if (isKeyboardVolumeAction(event.action)) {
+        runRoonVolumeControl(event.action, onControlComplete);
+      } else {
+        runRoonControl(event.action, null, onControlComplete);
+      }
     }
   });
 }

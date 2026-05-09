@@ -3,7 +3,7 @@ services:
     container_name: roon-coverart
     build:
       context: .
-    image: roon-coverart:5.0.3-local
+    image: roon-coverart:5.0.4-local
     network_mode: "host"
     restart: unless-stopped
     environment:
@@ -12,6 +12,7 @@ services:
       - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
       - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
       - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:

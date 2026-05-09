@@ -15,6 +15,7 @@
     "device": "",
     "devices": [],
     "debounceMs": 180,
+    "volumeStep": 5,
     "keyMap": {}
   },
   "logging": {

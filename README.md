@@ -32,8 +32,14 @@ Compared with the square-frame version, this build focuses on:
 
 ### Docker 镜像
 
-- `epochaudio/coverart_docker:5.0.3`
+- `epochaudio/coverart_docker:5.0.4`
 - `epochaudio/coverart_docker:latest`
+
+### 5.0.4 更新
+
+- 新增宿主机物理音量键控制：`KEY_VOLUMEUP`、`KEY_VOLUMEDOWN`、`KEY_MUTE`
+- 新增 `KEYBOARD_VOLUME_STEP` / `keyboard.volumeStep`，默认每次调整 `5` 个 Roon volume step
+- `latest` 已更新到 `5.0.4`
 
 ### 安装方式选择
 
@@ -99,6 +105,7 @@ docker run -d \
   -e KEYBOARD_DEVICE= \
   -e KEYBOARD_DEVICES= \
   -e KEYBOARD_DEBOUNCE_MS=180 \
+  -e KEYBOARD_VOLUME_STEP=5 \
   -v $(pwd)/images:/app/images \
   -v $(pwd)/config.json:/app/config.json:rw \
   -v /dev/input/by-id:/dev/input/by-id:ro \
@@ -120,7 +127,7 @@ services:
   coverart:
     build:
       context: .
-    image: roon-coverart:5.0.3-local
+    image: roon-coverart:5.0.4-local
     container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
@@ -130,6 +137,7 @@ services:
       - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
       - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
       - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:
@@ -182,6 +190,7 @@ cat > config/local.json <<'EOF'
     "device": "",
     "devices": [],
     "debounceMs": 180,
+    "volumeStep": 5,
     "keyMap": {}
   },
   "logging": {
@@ -214,6 +223,7 @@ Docker Compose 增加：
 - `keyboard.device`: 固定一个键盘设备路径，例如 `/dev/input/by-id/...-event-kbd`
 - `keyboard.devices`: 固定多个键盘设备路径
 - `keyboard.debounceMs`: 按键防抖时间，默认 `180`
+- `keyboard.volumeStep`: 音量键每次调整的 Roon relative_step 步数，默认 `5`
 - `keyboard.keyMap`: 自定义按键到控制动作的映射
 - `logging.level`: 日志级别，支持 `error` / `warn` / `info` / `debug`，默认 `info`
 
@@ -227,6 +237,7 @@ Docker Compose 增加：
 - `KEYBOARD_DEVICE`
 - `KEYBOARD_DEVICES`
 - `KEYBOARD_DEBOUNCE_MS`
+- `KEYBOARD_VOLUME_STEP`
 - `LOG_LEVEL`
 
 说明：
@@ -251,6 +262,7 @@ KEYBOARD_ENABLED=true
 KEYBOARD_DEVICE=
 KEYBOARD_DEVICES=
 KEYBOARD_DEBOUNCE_MS=180
+KEYBOARD_VOLUME_STEP=5
 ```
 
 OpenWrt 常见情况是 `/dev/input/event*` 为 `root:root 600`，系统安装脚本会用容器运行参数处理读取权限；如果你手写 `docker run`，可以参考上面的 Docker Run 示例。
@@ -277,6 +289,9 @@ ls -l /dev/input/by-path/
 - `KEY_UP` / `KEY_PLAY`: 播放
 - `KEY_DOWN` / `KEY_STOP` / `KEY_STOPCD`: 停止
 - `KEY_PAUSE`: 暂停
+- `KEY_VOLUMEUP`: 音量增加
+- `KEY_VOLUMEDOWN`: 音量降低
+- `KEY_MUTE`: 静音/取消静音
 
 如果没有发现键盘，或某个设备打开失败，只会输出 warning，不影响网页和 Roon 扩展启动。
 
@@ -313,7 +328,7 @@ docker ps -a --filter name=roon-coverart
 ### 源码构建（可选）
 
 ```bash
-docker build -t roon-coverart:5.0.3-local .
+docker build -t roon-coverart:5.0.4-local .
 ```
 
 ---
@@ -334,8 +349,14 @@ docker build -t roon-coverart:5.0.3-local .
 
 ### Docker Images
 
-- `epochaudio/coverart_docker:5.0.3`
+- `epochaudio/coverart_docker:5.0.4`
 - `epochaudio/coverart_docker:latest`
+
+### 5.0.4 Changes
+
+- Added host physical volume-key controls: `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, and `KEY_MUTE`
+- Added `KEYBOARD_VOLUME_STEP` / `keyboard.volumeStep`, defaulting to `5` Roon volume steps per key press
+- Updated `latest` to `5.0.4`
 
 ### Installation Options
 
@@ -401,6 +422,7 @@ docker run -d \
   -e KEYBOARD_DEVICE= \
   -e KEYBOARD_DEVICES= \
   -e KEYBOARD_DEBOUNCE_MS=180 \
+  -e KEYBOARD_VOLUME_STEP=5 \
   -v $(pwd)/images:/app/images \
   -v $(pwd)/config.json:/app/config.json:rw \
   -v /dev/input/by-id:/dev/input/by-id:ro \
@@ -422,7 +444,7 @@ services:
   coverart:
     build:
       context: .
-    image: roon-coverart:5.0.3-local
+    image: roon-coverart:5.0.4-local
     container_name: roon-coverart
     network_mode: "host"
     restart: unless-stopped
@@ -432,6 +454,7 @@ services:
       - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
       - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
       - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
+      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:
@@ -484,6 +507,7 @@ cat > config/local.json <<'EOF'
     "device": "",
     "devices": [],
     "debounceMs": 180,
+    "volumeStep": 5,
     "keyMap": {}
   },
   "logging": {
@@ -516,6 +540,7 @@ Add this line to Docker Compose:
 - `keyboard.device`: Pin one keyboard device path, for example `/dev/input/by-id/...-event-kbd`
 - `keyboard.devices`: Pin multiple keyboard device paths
 - `keyboard.debounceMs`: Key debounce time, default `180`
+- `keyboard.volumeStep`: Roon relative_step count for each volume key press, default `5`
 - `keyboard.keyMap`: Custom key-to-action mapping
 - `logging.level`: Log level, one of `error` / `warn` / `info` / `debug`, default `info`
 
@@ -529,6 +554,7 @@ Environment variables are also supported:
 - `KEYBOARD_DEVICE`
 - `KEYBOARD_DEVICES`
 - `KEYBOARD_DEBOUNCE_MS`
+- `KEYBOARD_VOLUME_STEP`
 - `LOG_LEVEL`
 
 Notes:
@@ -553,6 +579,7 @@ KEYBOARD_ENABLED=true
 KEYBOARD_DEVICE=
 KEYBOARD_DEVICES=
 KEYBOARD_DEBOUNCE_MS=180
+KEYBOARD_VOLUME_STEP=5
 ```
 
 By default, leave `KEYBOARD_DEVICE` / `KEYBOARD_DEVICES` empty. The app scans and listens to all detected keyboard event devices from `/dev/input/by-id/`, `/dev/input/by-path/`, and `/proc/bus/input/devices`. You can also pin one or more stable paths:
@@ -577,6 +604,9 @@ Default key mapping:
 - `KEY_UP` / `KEY_PLAY`: play
 - `KEY_DOWN` / `KEY_STOP` / `KEY_STOPCD`: stop
 - `KEY_PAUSE`: pause
+- `KEY_VOLUMEUP`: volume up
+- `KEY_VOLUMEDOWN`: volume down
+- `KEY_MUTE`: mute/unmute
 
 If no keyboard is detected, or one device fails to open, the app only logs a warning and does not stop the web UI or Roon extension.
 
@@ -613,7 +643,7 @@ docker ps -a --filter name=roon-coverart
 ### Build From Source (Optional)
 
 ```bash
-docker build -t roon-coverart:5.0.3-local .
+docker build -t roon-coverart:5.0.4-local .
 ```
 
 ## License

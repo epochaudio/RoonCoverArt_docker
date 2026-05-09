@@ -14,7 +14,8 @@
     "enabled": "KEYBOARD_ENABLED",
     "device": "KEYBOARD_DEVICE",
     "devices": "KEYBOARD_DEVICES",
-    "debounceMs": "KEYBOARD_DEBOUNCE_MS"
+    "debounceMs": "KEYBOARD_DEBOUNCE_MS",
+    "volumeStep": "KEYBOARD_VOLUME_STEP"
   },
   "logging": {
     "level": "LOG_LEVEL"

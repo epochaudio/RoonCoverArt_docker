@@ -10,6 +10,7 @@ yarn-error.log*
 config.json
 config/local.json
 images/
+backup/
 SYSTEM_MAINTENANCE.md
 REVIEW_FIX_PLAN.md
 

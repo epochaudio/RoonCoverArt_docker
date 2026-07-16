@@ -1,27 +1,24 @@
 {
-  "name": "CoverArt",
+  "name": "roon-coverart",
   "version": "5.0.4",
   "description": "CoverArt",
   "main": "app.js",
   "author": "门耳朵制作",
   "license": "MIT",
   "engines": {
-    "node": ">=6.x"
+    "node": ">=20"
   },
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "check": "node --check app.js && node --check healthcheck.js && node --check utils/imageStore.js && node --check utils/keyboardInput.js && node --check utils/webRoutes.js && node --check utils/zoneUtils.js && node --check public/js/coverart.js && node --check public/js/responsive-fonts.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "body-parser": "^1.19.0",
-    "colorthief": "^2.4.0",
     "command-line-args": "^5.1.1",
     "command-line-usage": "^6.1.0",
     "config": "^3.3.1",
     "express": "4.x",
-    "jquery": "^3.5.1",
-    "js-cookie": "^2.2.1",
     "node-roon-api": "github:roonlabs/node-roon-api",
-    "node-roon-api-browse": "github:roonlabs/node-roon-api-browse",
     "node-roon-api-image": "github:roonlabs/node-roon-api-image",
     "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
     "node-roon-api-status": "github:roonlabs/node-roon-api-status",

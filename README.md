@@ -2,6 +2,10 @@
 
 中文 | English
 
+维护记录：[MAINTENANCE.md](MAINTENANCE.md) · Docker/Compose 说明：[DOCKER.md](DOCKER.md)
+
+Maintenance log: [MAINTENANCE.md](MAINTENANCE.md) · Docker/Compose guide: [DOCKER.md](DOCKER.md)
+
 这是 `Roon Cover Art` 的 **16:9 显示版本（Docker）**，适合电视、宽屏显示器等 16:9 屏幕。
 
 与方形画框版本不同，本版本重点是：
@@ -113,12 +117,13 @@ docker run -d \
   epochaudio/coverart_docker:latest
 ```
 
-如果宿主机没有 `/dev/input/by-id` 或 `/dev/input/by-path`，删除对应 `-v` 行即可。如果 Docker 不支持 `--device-cgroup-rule`，删除该行即可；键盘已在容器启动前插好时，普通 `/dev/input` 挂载通常已经足够。
+`/dev/input` 提供事件设备节点；两个只读挂载提供稳定的 `by-id`/`by-path` 路径。宿主机缺少其中某个目录时，删除对应 `-v` 行并把 `KEYBOARD_DEVICE` 留空。Docker 不支持 `--device-cgroup-rule` 时可删除该参数。
 
 3. 打开页面
 
 - 默认地址：`http://localhost:3666`
 - 如果从局域网其他设备访问，请将 `localhost` 替换为宿主机 IP。
+- 健康检查：`http://localhost:3666/api/health`；容器状态可用 `docker compose ps` 查看。
 
 ### Docker Compose（推荐）
 
@@ -130,20 +135,20 @@ services:
     image: roon-coverart:5.0.4-local
     container_name: roon-coverart
     network_mode: "host"
+    init: true
     restart: unless-stopped
+    stop_grace_period: 10s
     environment:
-      - INPUT_GID=${INPUT_GID:-}
-      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-true}
-      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
-      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
-      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
-      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
+      INPUT_GID: "${INPUT_GID:-}"
+      KEYBOARD_ENABLED: "${KEYBOARD_ENABLED:-true}"
+      KEYBOARD_DEVICE: "${KEYBOARD_DEVICE:-}"
+      KEYBOARD_DEVICES: "${KEYBOARD_DEVICES:-}"
+      KEYBOARD_DEBOUNCE_MS: "${KEYBOARD_DEBOUNCE_MS:-180}"
+      KEYBOARD_VOLUME_STEP: "${KEYBOARD_VOLUME_STEP:-5}"
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:
       - "c 13:* rwm"
-    group_add:
-      - "${INPUT_GID:-0}"
     logging:
       driver: "json-file"
       options:
@@ -331,6 +336,8 @@ docker ps -a --filter name=roon-coverart
 docker build -t roon-coverart:5.0.4-local .
 ```
 
+Docker/Compose 详细维护说明 / Detailed guide: [`DOCKER.md`](DOCKER.md)。
+
 ---
 
 ## English
@@ -430,12 +437,13 @@ docker run -d \
   epochaudio/coverart_docker:latest
 ```
 
-If `/dev/input/by-id` or `/dev/input/by-path` does not exist on the host, remove the matching `-v` line. If Docker does not support `--device-cgroup-rule`, remove that line; mounting `/dev/input` is usually enough when the keyboard is attached before container startup.
+`/dev/input` provides event nodes; the two read-only mounts provide stable `by-id`/`by-path` names. If either host directory is absent, remove its `-v` line and leave `KEYBOARD_DEVICE` empty. Remove `--device-cgroup-rule` when unsupported.
 
 3. Open the UI
 
 - Default URL: `http://localhost:3666`
 - For LAN access from another device, replace `localhost` with the host IP address.
+- Health endpoint: `http://localhost:3666/api/health`; use `docker compose ps` for container health.
 
 ### Docker Compose (Recommended)
 
@@ -447,20 +455,20 @@ services:
     image: roon-coverart:5.0.4-local
     container_name: roon-coverart
     network_mode: "host"
+    init: true
     restart: unless-stopped
+    stop_grace_period: 10s
     environment:
-      - INPUT_GID=${INPUT_GID:-}
-      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-true}
-      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
-      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
-      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
-      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
+      INPUT_GID: "${INPUT_GID:-}"
+      KEYBOARD_ENABLED: "${KEYBOARD_ENABLED:-true}"
+      KEYBOARD_DEVICE: "${KEYBOARD_DEVICE:-}"
+      KEYBOARD_DEVICES: "${KEYBOARD_DEVICES:-}"
+      KEYBOARD_DEBOUNCE_MS: "${KEYBOARD_DEBOUNCE_MS:-180}"
+      KEYBOARD_VOLUME_STEP: "${KEYBOARD_VOLUME_STEP:-5}"
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:
       - "c 13:* rwm"
-    group_add:
-      - "${INPUT_GID:-0}"
     logging:
       driver: "json-file"
       options:
@@ -645,6 +653,8 @@ docker ps -a --filter name=roon-coverart
 ```bash
 docker build -t roon-coverart:5.0.4-local .
 ```
+
+Docker/Compose 详细维护说明 / Detailed guide: [`DOCKER.md`](DOCKER.md)。
 
 ## License
 

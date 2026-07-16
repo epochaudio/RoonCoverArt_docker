@@ -8,11 +8,12 @@ yarn-error.log*
 .env.*
 !.env.example
 
+backup/
 config.json
 config/local.json
 images/
-SYSTEM_MAINTENANCE.md
-REVIEW_FIX_PLAN.md
+test/
+*.md
 
 *.log
 .DS_Store

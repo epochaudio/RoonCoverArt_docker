@@ -6,7 +6,6 @@ var core = null;
 var transport = null;
 var pairStatus = false;
 var zoneStatus = [];
-var zoneList = [];
 
 // Change to working directory
 try {
@@ -60,11 +59,15 @@ if (options.help) {
 
 // Read config file
 var config = require("config");
-var fsPromises = require("fs").promises;
+var path = require("path");
 var {
   saveArtwork,
   getImageStats
-} = require("./utils/imageUtils");
+} = require("./utils/imageStore");
+var {
+  applyZoneChanges,
+  hasZoneListChanges
+} = require("./utils/zoneUtils");
 var {
   startKeyboardInput
 } = require("./utils/keyboardInput");
@@ -171,6 +174,7 @@ function getRoonImageFormatMime() {
 }
 
 var configPort = getNumericConfig("server.port", defaultListenPort);
+var artworkSaveDir = path.resolve(getStringConfig("artwork.saveDir", "./images"));
 var allowedOrigins = getListConfig("access.allowedOrigins", []);
 var configuredLogLevel = getStringConfig("logging.level", "info").toLowerCase();
 var logLevels = {
@@ -249,7 +253,6 @@ if (options.port) {
 // Setup Express
 var express = require("express");
 var http = require("http");
-var bodyParser = require("body-parser");
 
 var app = express();
 app.use(function(req, res, next) {
@@ -280,17 +283,10 @@ app.use(function(req, res, next) {
 
   next();
 });
-app.use(express.static("public", {
-    setHeaders: function(res, path) {
-        if (path.endsWith('.js')) {
-            res.set('Content-Type', 'application/javascript');
-        }
-    }
-}));
-app.use(bodyParser.json());
+app.use(express.static("public"));
 
 // 添加 images 目录的静态文件服务
-app.use('/images', express.static('images'));
+app.use("/images", express.static(artworkSaveDir, { maxAge: "1h" }));
 
 // Setup Socket IO
 var server = http.createServer(app);
@@ -315,7 +311,6 @@ var RoonApi = require("node-roon-api");
 var RoonApiImage = require("node-roon-api-image");
 var RoonApiStatus = require("node-roon-api-status");
 var RoonApiTransport = require("node-roon-api-transport");
-var RoonApiBrowse = require("node-roon-api-browse");
 var RoonApiSettings = require("node-roon-api-settings");
 
 // 定义设置变量
@@ -358,32 +353,13 @@ function getActiveZone() {
     return zoneStatus[0];
 }
 
+function getClientZoneStatus() {
+    var activeZone = getActiveZone();
+    return activeZone ? [activeZone] : [];
+}
+
 function emitPlaybackState(zone) {
-    if (!zone) {
-        io.emit("zoneStatus", []);
-        io.emit("notPlaying", { state: "unavailable" });
-        return;
-    }
-
-    if (settings.output) {
-        io.emit("zoneStatus", [zone]);
-    } else {
-        io.emit("zoneStatus", zoneStatus);
-    }
-
-    if (zone.state === "playing" && zone.now_playing) {
-        logDebug('播放信息:', {
-            image_key: zone.now_playing.image_key,
-            three_line: zone.now_playing.three_line,
-            state: zone.state
-        });
-        io.emit("nowplaying", {
-            ...zone.now_playing,
-            state: "playing"
-        });
-    } else {
-        io.emit("notPlaying", { state: zone.state || "unknown" });
-    }
+    io.emit("zoneStatus", zone ? [zone] : []);
 }
 
 // 创建 Roon API 实例
@@ -394,6 +370,7 @@ var roon = new RoonApi({
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
+    log_level:          "none",
 
     core_paired: function(_core) {
         console.log('Roon Core 配对成功');
@@ -410,45 +387,17 @@ var roon = new RoonApi({
 
         // 订阅 zones 变化
         transport.subscribe_zones((cmd, data) => {
-            var hasPlaybackRelevantChange = false;
-
             if (!isSeekOnlyZoneChange(data)) {
                 logDebug('收到zones订阅响应:', cmd, data);
             }
             
             try {
-                if (cmd == "Subscribed") {
+                if (cmd === "Subscribed") {
                     zoneStatus = data.zones || [];
                     emitPlaybackState(getActiveZone());
-                } else if (cmd == "Changed") {
-                    if (data.zones_removed) {
-                        data.zones_removed.forEach(zone => {
-                            zoneStatus = zoneStatus.filter(z => z.zone_id !== zone.zone_id);
-                        });
-                        hasPlaybackRelevantChange = true;
-                    }
-                    if (data.zones_added) {
-                        zoneStatus = [...zoneStatus, ...data.zones_added];
-                        hasPlaybackRelevantChange = true;
-                    }
-                    if (data.zones_changed) {
-                        data.zones_changed.forEach(changed => {
-                            const idx = zoneStatus.findIndex(z => z.zone_id === changed.zone_id);
-                            if (idx !== -1) {
-                                zoneStatus[idx] = changed;
-                                hasPlaybackRelevantChange = true;
-                                logDebug("处理zone变更:", {
-                                    zone_id: changed.zone_id,
-                                    state: changed.state,
-                                    has_settings_output: !!settings.output
-                                });
-                            }
-                        });
-                    }
-
-                    if (hasPlaybackRelevantChange) {
-                        emitPlaybackState(getActiveZone());
-                    }
+                } else if (cmd === "Changed" && hasZoneListChanges(data)) {
+                    zoneStatus = applyZoneChanges(zoneStatus, data);
+                    emitPlaybackState(getActiveZone());
                 }
             } catch (err) {
                 console.error('处理zones更新时出错:', err);
@@ -468,7 +417,6 @@ var roon = new RoonApi({
         transport = null;
         pairStatus = false;
         zoneStatus = [];
-        zoneList = [];
         
         // 通知客户端
         io.emit("pairStatus", { pairEnabled: false });
@@ -503,7 +451,7 @@ var svc_settings = new RoonApiSettings(roon, {
 
 // 初始化服务
 roon.init_services({
-    required_services: [RoonApiTransport, RoonApiImage, RoonApiBrowse],
+    required_services: [RoonApiTransport, RoonApiImage],
     provided_services: [svc_settings, svc_status]
 });
 
@@ -518,93 +466,6 @@ settings = roon.load_config("settings") || {
 // 开始发现 Roon Core
 roon.start_discovery();
 
-// Remove duplicates from zoneList array
-function removeDuplicateList(array, property) {
-  var x;
-  var new_array = [];
-  var lookup = {};
-  for (x in array) {
-    lookup[array[x][property]] = array[x];
-  }
-
-  for (x in lookup) {
-    new_array.push(lookup[x]);
-  }
-
-  zoneList = new_array;
-  io.emit("zoneList", zoneList);
-}
-
-// Remove duplicates from zoneStatus array
-function removeDuplicateStatus(array, property) {
-  var x;
-  var new_array = [];
-  var lookup = {};
-  for (x in array) {
-    lookup[array[x][property]] = array[x];
-  }
-
-  for (x in lookup) {
-    new_array.push(lookup[x]);
-  }
-
-  zoneStatus = new_array;
-  io.emit("zoneStatus", zoneStatus);
-}
-
-function refresh_browse(zone_id, options, callback) {
-  options = Object.assign(
-    {
-      hierarchy: "browse",
-      zone_or_output_id: zone_id
-    },
-    options
-  );
-
-  core.services.RoonApiBrowse.browse(options, function(error, payload) {
-    if (error) {
-      console.log(error, payload);
-      return;
-    }
-
-    if (payload.action == "list") {
-      var items = [];
-      if (payload.list.display_offset > 0) {
-        var listoffset = payload.list.display_offset;
-      } else {
-        var listoffset = 0;
-      }
-      core.services.RoonApiBrowse.load(
-        {
-          hierarchy: "browse",
-          offset: listoffset,
-          set_display_offset: listoffset
-        },
-        function(error, payload) {
-          callback(payload);
-        }
-      );
-    }
-  });
-}
-
-function load_browse(listoffset, callback) {
-  core.services.RoonApiBrowse.load(
-    {
-      hierarchy: "browse",
-      offset: listoffset,
-      set_display_offset: listoffset
-    },
-    function(error, payload) {
-      callback(payload);
-    }
-  );
-}
-
-function isBrowseServiceReady() {
-  return !!(core && core.services && core.services.RoonApiBrowse);
-}
-
 var transportControlMap = {
   previous: "previous",
   next: "next",
@@ -618,18 +479,6 @@ var volumeControlMap = {
   volumeup: 1,
   volumedown: -1
 };
-
-function getZoneIdFromMessage(msg) {
-  if (typeof msg === "string") {
-    return msg;
-  }
-
-  if (msg && typeof msg === "object" && msg.zone_id) {
-    return msg.zone_id;
-  }
-
-  return null;
-}
 
 function getDefaultControlZoneId() {
   var activeZone = getActiveZone();
@@ -858,9 +707,9 @@ io.on("connection", function(socket) {
     }
   }
 
-  function runSocketControl(actionName, controlAction, msg) {
+  function runSocketControl(actionName, controlAction) {
     runTransportAction(actionName, function() {
-      runRoonControl(controlAction, getZoneIdFromMessage(msg), function(error) {
+      runRoonControl(controlAction, null, function(error) {
         if (error) {
           socket.emit("serverError", { error: error.message || "执行操作失败" });
         }
@@ -872,267 +721,48 @@ io.on("connection", function(socket) {
   socket.emit("pairStatus", { pairEnabled: pairStatus });
   
   // 如果已配对且有区域信息，发送区域状态
-  if (pairStatus && zoneStatus.length > 0) {
-    var activeZone = getActiveZone();
-    socket.emit("zoneStatus", settings.output && activeZone ? [activeZone] : zoneStatus);
+  if (pairStatus) {
+    socket.emit("zoneStatus", getClientZoneStatus());
   }
 
-  socket.on("getZone", function() {
-    if (pairStatus && zoneStatus.length > 0) {
-      var activeZone = getActiveZone();
-      socket.emit("zoneStatus", settings.output && activeZone ? [activeZone] : zoneStatus);
-    } else {
-      console.log('Zones未就绪或为空');
-      socket.emit("zoneStatus", []);
-    }
+
+
+  socket.on("goPrev", function() {
+    runSocketControl("goPrev", "previous");
   });
 
-  socket.on("getPairStatus", function() {
-    socket.emit("pairStatus", { pairEnabled: pairStatus });
+  socket.on("goNext", function() {
+    runSocketControl("goNext", "next");
   });
 
-  socket.on("changeVolume", function(msg) {
-    runTransportAction("changeVolume", function() {
-      if (!msg || !msg.output_id || typeof msg.volume === "undefined") {
-        throw new Error("changeVolume参数无效");
-      }
-      transport.change_volume(msg.output_id, "absolute", msg.volume);
-    });
+  socket.on("goPlayPause", function() {
+    runSocketControl("goPlayPause", "playpause");
   });
 
-  socket.on("changeSetting", function(msg) {
-    var transportSettings = {};
-
-    if (!msg || !msg.zone_id || !msg.setting) {
-      socket.emit("serverError", { error: "changeSetting参数无效" });
-      return;
-    }
-
-    if (msg.setting == "shuffle") {
-      transportSettings.shuffle = msg.value;
-    } else if (msg.setting == "auto_radio") {
-      transportSettings.auto_radio = msg.value;
-    } else if (msg.setting == "loop") {
-      transportSettings.loop = msg.value;
-    } else {
-      socket.emit("serverError", { error: "不支持的设置项" });
-      return;
-    }
-
-    runTransportAction("changeSetting", function() {
-      transport.change_settings(msg.zone_id, transportSettings, function(error) {
-        if (error) {
-          console.error("change_settings失败:", error);
-          socket.emit("serverError", { error: "修改设置失败" });
-        }
-      });
-    });
+  socket.on("goPlay", function() {
+    runSocketControl("goPlay", "play");
   });
 
-  socket.on("goPrev", function(msg) {
-    runSocketControl("goPrev", "previous", msg);
+  socket.on("goPause", function() {
+    runSocketControl("goPause", "pause");
   });
 
-  socket.on("goNext", function(msg) {
-    runSocketControl("goNext", "next", msg);
-  });
-
-  socket.on("goPlayPause", function(msg) {
-    runSocketControl("goPlayPause", "playpause", msg);
-  });
-
-  socket.on("goPlay", function(msg) {
-    runSocketControl("goPlay", "play", msg);
-  });
-
-  socket.on("goPause", function(msg) {
-    runSocketControl("goPause", "pause", msg);
-  });
-
-  socket.on("goStop", function(msg) {
-    runSocketControl("goStop", "stop", msg);
+  socket.on("goStop", function() {
+    runSocketControl("goStop", "stop");
   });
 });
 
-// Web Routes
-app.get("/", function(req, res) {
-  res.sendFile(__dirname + "/public/index.html");
-});
-
-app.get("/roonapi/getImage", function(req, res) {
-  console.log('收到图片请求:', {
-    image_key: req.query.image_key,
-    albumName: req.query.albumName
-  });
-
-  if (!core || !core.services || !core.services.RoonApiImage) {
-    console.log('Roon Core未就绪或未配对');
-    res.status(500).json({ error: 'Roon Core未就绪或未配对' });
-    return;
-  }
-
-  var imageMimeType = getRoonImageFormatMime();
-  core.services.RoonApiImage.get_image(
-    req.query.image_key,
-    { scale: "fit", width: 1080, height: 1080, format: imageMimeType },
-    async function(cb, contentType, body) {
-      console.log('获取图片结果:', {
-        success: !!body,
-        contentType,
-        size: body ? body.length : 0
-      });
-
-      if (!body) {
-        console.log('获取图片失败');
-        res.status(500).json({ error: '获取图片失败' });
-        return;
-      }
-
-      // 检查是否启用了自动保存功能
-      const autoSave = getBooleanConfig("artwork.autoSave", true);
-      console.log('自动保存状态:', {
-        autoSave,
-        hasAlbumName: !!req.query.albumName,
-        image_key: req.query.image_key
-      });
-      
-      if (autoSave && req.query.albumName) {
-        try {
-          console.log('开始保存专辑封面:', req.query.albumName);
-          await saveArtwork(body, req.query.albumName, req.query.image_key);
-          console.log('专辑封面保存流程完成');
-        } catch (error) {
-          console.error('保存专辑封面时出错:', error);
-        }
-      }
-      
-      res.contentType = contentType;
-      res.writeHead(200, { "Content-Type": contentType || imageMimeType });
-      res.end(body, "binary");
-    }
-  );
-});
-
-app.get("/roonapi/getImage4k", function(req, res) {
-  if (!core || !core.services || !core.services.RoonApiImage) {
-    console.log('Roon Core未就绪或未配对');
-    res.status(500).json({ error: 'Roon Core未就绪或未配对' });
-    return;
-  }
-  
-  var imageMimeType = getRoonImageFormatMime();
-  core.services.RoonApiImage.get_image(
-    req.query.image_key,
-    { scale: "fit", width: 2160, height: 2160, format: imageMimeType },
-    function(cb, contentType, body) {
-      if (!body) {
-        console.log('获取图片失败');
-        res.status(500).json({ error: '获取图片失败' });
-        return;
-      }
-      
-      res.contentType = contentType;
-      res.writeHead(200, { "Content-Type": contentType || imageMimeType });
-      res.end(body, "binary");
-    }
-  );
-});
-
-app.post("/roonapi/goRefreshBrowse", function(req, res) {
-  if (!isBrowseServiceReady()) {
-    res.status(503).json({ error: "Roon Browse服务未就绪" });
-    return;
-  }
-  refresh_browse(req.body.zone_id, req.body.options, function(payload) {
-    res.send({ data: payload });
-  });
-});
-
-app.post("/roonapi/goLoadBrowse", function(req, res) {
-  if (!isBrowseServiceReady()) {
-    res.status(503).json({ error: "Roon Browse服务未就绪" });
-    return;
-  }
-  load_browse(req.body.listoffset, function(payload) {
-    res.send({ data: payload });
-  });
-});
-
-app.use(
-  "/jquery/jquery.min.js",
-  express.static(__dirname + "/node_modules/jquery/dist/jquery.min.js")
-);
-
-app.use(
-  "/js-cookie/js.cookie.js",
-  express.static(__dirname + "/node_modules/js-cookie/src/js.cookie.js")
-);
-
-// 添加状态查看路由
-app.get("/roonapi/artworkStatus", async function(req, res) {
-  try {
-    const saveDir = config.has('artwork.saveDir') 
-      ? config.get('artwork.saveDir') 
-      : './images';
-    
-    const stats = await getImageStats(saveDir);
-    res.json({
-      enabled: getBooleanConfig("artwork.autoSave", true),
-      saveDir: saveDir,
-      ...stats
-    });
-  } catch (error) {
-    console.error('获取状态失败:', error);
-    res.status(500).json({ error: '获取状态失败' });
-  }
-});
-
-// 添加获取图片列表的路由
-app.get("/api/images", async function(req, res) {
-  try {
-    const saveDir = config.has('artwork.saveDir') ? config.get('artwork.saveDir') : './images';
-    await fsPromises.mkdir(saveDir, { recursive: true });
-    const files = await fsPromises.readdir(saveDir);
-    const imageFiles = files.filter(file => /\.(jpg|jpeg|png)$/i.test(file));
-    res.json(imageFiles);
-  } catch (error) {
-    console.error('获取图片列表失败:', error);
-    res.status(500).json({ error: '获取图片列表失败' });
-  }
-});
-
-app.get("/api/status", function(req, res) {
-    if (!core || !transport) {
-        res.status(500).json({ error: "未连接到 Roon Core" });
-        return;
-    }
-
-    // 如果有选定的区域，返回其状态
-    if (settings.output) {
-        const zone = zoneStatus.find(z => 
-            z.outputs.some(o => o.output_id === settings.output.output_id)
-        );
-        
-        if (zone && zone.state === "playing" && zone.now_playing) {
-            res.json({
-                is_playing: true,
-                ...zone.now_playing
-            });
-            return;
-        }
-    }
-    
-    res.json({ is_playing: false });
-});
-
-app.get("/api/pair", function(req, res) {
-    res.json({ pairEnabled: pairStatus });
-});
-
-app.get("/api/zones", function(req, res) {
-    if (!core || !transport) {
-        res.status(500).json({ error: "未连接到 Roon Core" });
-        return;
-    }
-    res.json(zoneStatus);
+// Web routes
+var registerWebRoutes = require("./utils/webRoutes");
+registerWebRoutes(app, {
+  artworkSaveDir: artworkSaveDir,
+  getCore: function() { return core; },
+  getImageMimeType: getRoonImageFormatMime,
+  isAutoSaveEnabled: function() { return getBooleanConfig("artwork.autoSave", true); },
+  saveArtwork: saveArtwork,
+  getImageStats: getImageStats,
+  isPaired: function() { return pairStatus; },
+  hasActiveZone: function() { return !!getActiveZone(); },
+  logDebug: logDebug,
+  logWarn: logWarn
 });

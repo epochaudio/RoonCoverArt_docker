@@ -10,25 +10,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="shortcut icon" href="/favicons/favicon.ico" type="image/x-icon" />
     <link rel="icon" href="/favicons/favicon.ico" type="image/x-icon" />
-    <link rel="stylesheet" type="text/css" href="/css/site.css" />
     <link rel="stylesheet" type="text/css" href="/css/android-styles.css" />
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/jquery/jquery.min.js"></script>
-    <script src="/js-cookie/js.cookie.js"></script>
-    <script src="/js/color-thief.js"></script>
-    <script src="/js/index.js"></script>
-    <script src="/js/responsive-fonts.js"></script>
-    <script src="/js/main.js"></script>
-    <script src="/js/NoSleep.min.js"></script>
+    <script defer src="/socket.io/socket.io.js"></script>
+    <script defer src="/js/color-thief.js"></script>
+    <script defer src="/js/responsive-fonts.js"></script>
+    <script defer src="/js/coverart.js"></script>
     <script>
-      function toggleFullScreen() {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(err => {
-            console.log(`Error attempting to enable full-screen mode: ${err.message}`);
-          });
+      function enterFullScreen() {
+        if (document.fullscreenElement) return;
+        const requestFullScreen = document.documentElement.requestFullscreen
+          || document.documentElement.webkitRequestFullscreen;
+        if (typeof requestFullScreen !== "function") return;
+        const request = requestFullScreen.call(document.documentElement);
+        if (request && typeof request.catch === "function") {
+          request.catch(error => console.warn("进入全屏失败:", error.message));
         }
       }
-      document.addEventListener('dblclick', toggleFullScreen);
+      document.addEventListener('dblclick', enterFullScreen);
     </script>
     <style>
       /*
@@ -68,6 +66,7 @@
       }
 
       body {
+        font-family: "Lato", sans-serif;
         margin: 0;
         padding: 0;
         overflow: hidden;
@@ -80,19 +79,6 @@
       /* 隐藏所有默认的浏览器UI元素 */
       ::-webkit-scrollbar {
         display: none;
-      }
-
-      /* 背景层 */
-      #coverBackground {
-        position: fixed;
-        top: 0; right: 0; bottom: 0; left: 0;
-        z-index: var(--layer-background);
-        background-size: cover;
-        background-position: center;
-        opacity: 0.75;
-        filter: blur(18px);
-        pointer-events: none;
-        transition: all 0.5s ease;
       }
 
 	      #colorBackground {
@@ -227,7 +213,7 @@
 	      }
 
       /* 共享布局样式 */
-      .fullscreen-container,
+      .playing-mode,
       .grid-wrapper,
       #pairDisabled {
         position: fixed;
@@ -413,37 +399,6 @@
         opacity: 0.8;
       }
 
-      .buttonOverlay {
-        width: 96px;
-        height: 48px;
-        font-weight: bold;
-        border: none;
-        border-radius: 10px;
-        -webkit-filter: drop-shadow(5px 5px 5px black);
-        filter: drop-shadow(5px 5px 5px black);
-        margin: 32px;
-        background-color: #eff0f1;
-        color: #232629;
-      }
-
-      .overlayContent {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background-color: #232629;
-        color: #eff0f1;
-        width: 640px;
-        height: auto;
-        max-height: 95%;
-        max-width: 95%;
-        border-radius: 10px;
-        padding: 5px;
-        -webkit-filter: drop-shadow(10px 10px 10px black);
-        filter: drop-shadow(10px 10px 10px black);
-        z-index: 300;
-        overflow-y: scroll;
-      }
 
       /* 竖屏模式：3列5行 - Android 8.0兼容 */
       @media (orientation: portrait) {
@@ -488,7 +443,7 @@
           max-height: calc(95vw * 16/9);  /* 保持16:9比例 */
         }
         
-        .fullscreen-container {
+        .playing-mode {
           padding: 2vh 0;  /* 添加适当的上下内边距 */
         }
       }

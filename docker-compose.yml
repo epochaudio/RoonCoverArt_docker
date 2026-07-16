@@ -1,29 +1,42 @@
 services:
   coverart:
-    container_name: roon-coverart
+    # Build the reviewed source locally. To deploy a published image instead,
+    # remove "build" and replace "image" with the required immutable tag.
     build:
       context: .
+      dockerfile: Dockerfile
     image: roon-coverart:5.0.4-local
-    network_mode: "host"
+    container_name: roon-coverart
+
+    # Host networking is required for Roon discovery multicast. SERVER_PORT is
+    # therefore exposed directly on the host and no "ports" mapping is needed.
+    network_mode: host
+    init: true
     restart: unless-stopped
+    stop_grace_period: 10s
+
     environment:
-      - INPUT_GID=${INPUT_GID:-}
-      - KEYBOARD_ENABLED=${KEYBOARD_ENABLED:-true}
-      - KEYBOARD_DEVICE=${KEYBOARD_DEVICE:-}
-      - KEYBOARD_DEVICES=${KEYBOARD_DEVICES:-}
-      - KEYBOARD_DEBOUNCE_MS=${KEYBOARD_DEBOUNCE_MS:-180}
-      - KEYBOARD_VOLUME_STEP=${KEYBOARD_VOLUME_STEP:-5}
+      INPUT_GID: "${INPUT_GID:-}"
+      KEYBOARD_ENABLED: "${KEYBOARD_ENABLED:-true}"
+      KEYBOARD_DEVICE: "${KEYBOARD_DEVICE:-}"
+      KEYBOARD_DEVICES: "${KEYBOARD_DEVICES:-}"
+      KEYBOARD_DEBOUNCE_MS: "${KEYBOARD_DEBOUNCE_MS:-180}"
+      KEYBOARD_VOLUME_STEP: "${KEYBOARD_VOLUME_STEP:-5}"
+
+    # This mapping exposes the event device nodes. Docker does not include the
+    # host's by-id/by-path symlink directories here; those are mounted read-only
+    # below so stable KEYBOARD_DEVICE paths continue to work.
     devices:
       - /dev/input:/dev/input
     device_cgroup_rules:
       - "c 13:* rwm"
-    group_add:
-      - "${INPUT_GID:-0}"
+
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"
+
     volumes:
       - ./images:/app/images:rw
       - ./config.json:/app/config.json:rw
